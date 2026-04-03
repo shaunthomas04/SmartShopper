@@ -36,8 +36,8 @@ const int MAX_VISIBLE = 9;
 const int CENTER   = 512;
 const int DEADZONE = 100;
 
-bool joystickUp()   { return (1023 - ss.analogRead(15)) < CENTER - DEADZONE; }
-bool joystickDown() { return (1023 - ss.analogRead(15)) > CENTER + DEADZONE; }
+bool joystickUp()   { return (1023 - ss.analogRead(15)) > CENTER + DEADZONE; }
+bool joystickDown() { return (1023 - ss.analogRead(15)) < CENTER - DEADZONE; }
 
 // Debounce joystick so one tilt = one move
 unsigned long lastJoyMove = 0;
@@ -156,8 +156,8 @@ void setup() {
 
     lastButtons = ss.digitalReadBulk(button_mask);
 
-    drawSuggestions();
-    currentScreen = SUGGESTIONS;
+    drawShoppingList();
+    currentScreen = SHOPPING_LIST;
 }
 
 // ----------- Loop -----------
