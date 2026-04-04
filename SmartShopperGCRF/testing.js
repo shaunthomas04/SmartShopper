@@ -122,6 +122,22 @@ async function getSerpShoppingItems(query, location) {
   });
 }
 
+async function getShoppingResultsForList(suggestions, zip) {
+  const location = await getLocationFromZip(zip);
+  if (!location) throw new Error("Failed to convert ZIP to location");
+
+  const results = {};
+
+  // Run all searches in parallel
+  await Promise.all(
+    suggestions.map(async (query) => {
+      const items = await getSerpShoppingItems(query, location);
+      results[query] = items;
+    })
+  );
+
+  return results;
+}
 
 // (async () => {
 //   try {
@@ -130,23 +146,12 @@ async function getSerpShoppingItems(query, location) {
 
 //     const suggestions = await getSuggestions(transcribedText);
 //     console.log("Shopping suggestions:", suggestions);
+
+//     const zip = "90210";
+//     const allResults = await getShoppingResultsForList(suggestions, zip);
+//     console.log(JSON.stringify(allResults, null, 2));
+
 //   } catch (err) {
 //     console.error("Error:", err);
 //   }
 // })();
-
-// (async () => {
-//   const locationString = await getLocationFromZip("90210");
-//   console.log(locationString); // → "90210, California, United States"
-// })();
-
-(async () => {
-  try {
-    const locationString = await getLocationFromZip("90210");
-    console.log(locationString); "90210, California, United States"
-    const results = await getSerpShoppingItems("iPhone", locationString);
-    console.log(results);
-  } catch (err) {
-    console.error(err);
-  }
-})();
