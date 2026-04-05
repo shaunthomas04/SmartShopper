@@ -1,6 +1,20 @@
 #include <M5Unified.h>
 #include "Adafruit_seesaw.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <SD.h>
 #include <vector>
+
+// ----------- WiFi & User -----------
+const char* WIFI_SSID     = "CBU-LANCERS";
+const char* WIFI_PASSWORD = "L@ncerN@tion";
+const String USER_ID      = "shaun2026";
+
+// ----------- Endpoint -----------
+const String ENDPOINT = "https://smart-shopper-967923575473.europe-west1.run.app";
+
+// ----------- Hardcoded WAV file on SD -----------
+const char* WAV_PATH = "/record.wav";
 
 // ----------- Seesaw Gamepad -----------
 Adafruit_seesaw ss;
@@ -36,7 +50,9 @@ const int MAX_VISIBLE = 9;
 char zipCode[6]   = "95762";
 int  zipCursorPos = 0;
 
-// ----------- Record State -----------
+// ----------- Record Screen State -----------
+// We no longer actually record — just track whether user has "pressed" the button
+// so the UI still shows RECORD/STOP toggle, and A sends the SD file.
 bool isRecording = false;
 
 // ----------- Record button bounds -----------
@@ -71,6 +87,15 @@ bool buttonJustPressed(uint32_t buttons, uint32_t pin) {
     return !(buttons & (1UL << pin)) && (lastButtons & (1UL << pin));
 }
 
+// ----------- userId overlay (bottom-right corner) -----------
+void drawUserIdOverlay() {
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    int w = USER_ID.length() * 6;
+    M5.Display.setCursor(320 - w - 4, 240 - 10);
+    M5.Display.print(USER_ID);
+}
+
 // ----------- Draw: Shopping List -----------
 void drawShoppingList() {
     M5.Display.clear();
@@ -88,23 +113,22 @@ void drawShoppingList() {
         M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
         M5.Display.setCursor(10, 55);
         M5.Display.println("(Empty)");
-        return;
+    } else {
+        int visible = min((int)shoppingList.size() - listScrollOffset, MAX_VISIBLE);
+        for (int i = 0; i < visible; i++) {
+            int idx = i + listScrollOffset;
+            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            M5.Display.setCursor(10, 50 + i * 20);
+            M5.Display.println("- " + shoppingList[idx]);
+        }
+        if ((int)shoppingList.size() > MAX_VISIBLE) {
+            M5.Display.setTextSize(1);
+            M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+            M5.Display.setCursor(10, 50 + MAX_VISIBLE * 20);
+            M5.Display.printf("(%d items, scroll with stick)", (int)shoppingList.size());
+        }
     }
-
-    int visible = min((int)shoppingList.size() - listScrollOffset, MAX_VISIBLE);
-    for (int i = 0; i < visible; i++) {
-        int idx = i + listScrollOffset;
-        M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-        M5.Display.setCursor(10, 50 + i * 20);
-        M5.Display.println("- " + shoppingList[idx]);
-    }
-
-    if ((int)shoppingList.size() > MAX_VISIBLE) {
-        M5.Display.setTextSize(1);
-        M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        M5.Display.setCursor(10, 50 + MAX_VISIBLE * 20);
-        M5.Display.printf("(%d items, scroll with stick)", (int)shoppingList.size());
-    }
+    drawUserIdOverlay();
 }
 
 // ----------- Draw: Suggestions -----------
@@ -132,6 +156,7 @@ void drawSuggestions() {
         M5.Display.println(suggestions[i]);
     }
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    drawUserIdOverlay();
 }
 
 // ----------- Draw: ZIP Editor -----------
@@ -156,7 +181,6 @@ void drawZipEditor() {
 
     for (int i = 0; i < 5; i++) {
         int x = START_X + i * SPACING;
-
         if (i == zipCursorPos) {
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_BLUE);
             M5.Display.setTextSize(1);
@@ -168,7 +192,6 @@ void drawZipEditor() {
         } else {
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_DARKGREY);
         }
-
         M5.Display.setTextSize(4);
         M5.Display.setTextColor(TFT_WHITE, i == zipCursorPos ? TFT_BLUE : TFT_DARKGREY);
         M5.Display.setCursor(x, DIGIT_Y + 8);
@@ -185,56 +208,184 @@ void drawZipEditor() {
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.setCursor(10, 190);
     M5.Display.println("B = Save & go back");
+
+    drawUserIdOverlay();
 }
 
 // ----------- Draw: Record Screen -----------
 void drawRecordScreen() {
     M5.Display.clear();
 
-    // Title
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
     M5.Display.println("Record");
 
-    // Instructions
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 38);
-    M5.Display.println("A or tap button = toggle  B = go back");
+    M5.Display.println("Tap button=toggle  A=send  B=back");
 
     // Always draw the red button
     M5.Display.fillRoundRect(REC_BTN_X, REC_BTN_Y, REC_BTN_W, REC_BTN_H, REC_BTN_R, TFT_RED);
 
-    // Center label inside the button — textSize 3 = 18px wide, 24px tall per char
+    // Centered label swaps between RECORD / STOP
     const char* label = isRecording ? "STOP" : "RECORD";
-    const int charW   = 18;
-    const int charH   = 24;
-    int textW  = strlen(label) * charW;
-    int textX  = REC_BTN_X + (REC_BTN_W - textW) / 2;
-    int textY  = REC_BTN_Y + (REC_BTN_H - charH) / 2;
+    const int charW = 18;
+    const int charH = 24;
+    int textW = strlen(label) * charW;
+    int textX = REC_BTN_X + (REC_BTN_W - textW) / 2;
+    int textY = REC_BTN_Y + (REC_BTN_H - charH) / 2;
 
     M5.Display.setTextSize(3);
     M5.Display.setTextColor(TFT_WHITE, TFT_RED);
     M5.Display.setCursor(textX, textY);
     M5.Display.print(label);
 
-    // REC indicator below button — only when recording
+    // Status line below button
+    M5.Display.setTextSize(1);
     if (isRecording) {
-        M5.Display.setTextSize(1);
         M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        // Center "● REC" below button
-        const char* recLabel = "* REC";
-        int recW = strlen(recLabel) * 6;
-        M5.Display.setCursor((320 - recW) / 2, REC_BTN_Y + REC_BTN_H + 16);
-        M5.Display.print(recLabel);
+        M5.Display.setCursor(REC_BTN_X + 30, REC_BTN_Y + REC_BTN_H + 10);
+        M5.Display.print("* RECORDING");
+    } else {
+        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+        M5.Display.setCursor(REC_BTN_X + 10, REC_BTN_Y + REC_BTN_H + 10);
+        M5.Display.print("A = Send record.wav");
     }
+
+    // ZIP reminder
+    M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    M5.Display.setCursor(10, 195);
+    M5.Display.printf("ZIP: %s", zipCode);
+
+    drawUserIdOverlay();
 }
 
-// ----------- Toggle recording -----------
-void toggleRecording() {
-    isRecording = !isRecording;
-    Serial.println(isRecording ? "Recording started" : "Recording stopped");
+// ----------- Send /record.wav from SD via HTTP POST -----------
+void sendRecording() {
+    // Show sending screen
+    M5.Display.clear();
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(10, 10);
+    M5.Display.println("Sending...");
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.setCursor(10, 40);
+    M5.Display.printf("File : %s", WAV_PATH);
+    M5.Display.setCursor(10, 55);
+    M5.Display.printf("ZIP  : %s", zipCode);
+    M5.Display.setCursor(10, 70);
+    M5.Display.printf("User : %s", USER_ID.c_str());
+    drawUserIdOverlay();
+
+    // Open WAV file from SD
+    File wavFile = SD.open(WAV_PATH, FILE_READ);
+    if (!wavFile) {
+        Serial.println("[ERROR] Could not open /record.wav from SD card");
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 100);
+        M5.Display.println("SD file not found!");
+        drawUserIdOverlay();
+        delay(2000);
+        drawRecordScreen();
+        return;
+    }
+
+    size_t fileSize = wavFile.size();
+    Serial.printf("[INFO] Opened %s — %d bytes\n", WAV_PATH, fileSize);
+
+    // Read entire file into RAM buffer
+    uint8_t* wavBuf = (uint8_t*)malloc(fileSize);
+    if (!wavBuf) {
+        Serial.println("[ERROR] Not enough RAM to buffer WAV file");
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 100);
+        M5.Display.println("Out of memory!");
+        wavFile.close();
+        drawUserIdOverlay();
+        delay(2000);
+        drawRecordScreen();
+        return;
+    }
+    wavFile.read(wavBuf, fileSize);
+    wavFile.close();
+
+    // Connect WiFi if needed
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[INFO] WiFi not connected, reconnecting...");
+        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        M5.Display.setCursor(10, 100);
+        M5.Display.println("Connecting WiFi...");
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        int tries = 0;
+        while (WiFi.status() != WL_CONNECTED && tries < 30) {
+            delay(500);
+            tries++;
+        }
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[ERROR] WiFi connection failed");
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 120);
+        M5.Display.println("WiFi failed!");
+        free(wavBuf);
+        drawUserIdOverlay();
+        delay(2000);
+        drawRecordScreen();
+        return;
+    }
+
+    // Build URL
+    String url = ENDPOINT + "?zipCode=" + String(zipCode) + "&userId=" + USER_ID;
+    Serial.printf("[INFO] POST to: %s\n", url.c_str());
+
+    HTTPClient http;
+    http.begin(url);
+    http.addHeader("Content-Type", "audio/wav");
+    http.addHeader("X-User-Id", USER_ID);
+    http.setTimeout(15000);  // 15s timeout for large files
+
+    int httpCode = http.POST(wavBuf, fileSize);
+    free(wavBuf);
+
+    String responseBody = http.getString();
+
+    // Serial output
+    Serial.println("========== HTTP RESPONSE ==========");
+    Serial.printf("HTTP Code : %d\n", httpCode);
+    Serial.printf("Response  : %s\n", responseBody.c_str());
+    Serial.println("===================================");
+
+    http.end();
+
+    // Show result on screen
+    M5.Display.clear();
+    M5.Display.setTextSize(2);
+    if (httpCode > 0) {
+        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+        M5.Display.setCursor(10, 20);
+        M5.Display.printf("HTTP %d OK", httpCode);
+    } else {
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 20);
+        M5.Display.printf("Error %d", httpCode);
+    }
+
+    // Show first ~200 chars of response body on screen
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(10, 55);
+    M5.Display.println("Response:");
+    M5.Display.setCursor(10, 68);
+    // Wrap long responses so they fit on screen
+    String preview = responseBody.substring(0, 220);
+    M5.Display.println(preview);
+
+    drawUserIdOverlay();
+    delay(3000);
     drawRecordScreen();
 }
 
@@ -244,11 +395,30 @@ void flashFeedback(uint16_t color) {
     delay(80);
 }
 
+#define SD_CS 4
 // ----------- Setup -----------
 void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
     Serial.begin(115200);
+
+    Serial.println("Testing SD...");
+
+    if (!SD.begin(SD_CS, SPI, 1000000)) {
+        Serial.println("SD FAILED");
+    } else {
+        Serial.println("SD OK");
+
+        if (SD.exists("/record.wav")) {
+            Serial.println("File exists!");
+        } else {
+            Serial.println("File missing");
+        }
+    }
+
+    // Start WiFi
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.println("[INFO] WiFi connecting...");
 
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -256,20 +426,18 @@ void setup() {
     M5.Display.println("Starting seesaw...");
 
     while (!ss.begin(0x50)) {
-        Serial.println("seesaw not found, retrying...");
+        Serial.println("[WARN] seesaw not found, retrying...");
         M5.Display.setCursor(10, 40);
         M5.Display.println("Retrying...");
         delay(500);
     }
-    Serial.println("seesaw started");
+    Serial.println("[INFO] Seesaw started");
 
     uint32_t version = ((ss.getVersion() >> 16) & 0xFFFF);
-    Serial.print("Seesaw product version: ");
-    Serial.println(version);
+    Serial.printf("[INFO] Seesaw product version: %d\n", version);
 
     ss.pinModeBulk(button_mask, INPUT_PULLUP);
     ss.setGPIOInterrupts(button_mask, 1);
-
     lastButtons = ss.digitalReadBulk(button_mask);
 
     drawShoppingList();
@@ -282,18 +450,16 @@ void loop() {
 
     uint32_t buttons = ss.digitalReadBulk(button_mask);
 
-    // -------- X: open ZIP editor --------
+    // -------- Global nav --------
     if (buttonJustPressed(buttons, BUTTON_X) && currentScreen != ZIP_EDITOR) {
         zipCursorPos  = 0;
         currentScreen = ZIP_EDITOR;
         drawZipEditor();
     }
-    // -------- Y: open Record screen --------
     else if (buttonJustPressed(buttons, BUTTON_Y) && currentScreen != RECORD_SCREEN) {
         currentScreen = RECORD_SCREEN;
         drawRecordScreen();
     }
-    // -------- SELECT: toggle Shopping List / Suggestions --------
     else if (buttonJustPressed(buttons, BUTTON_SELECT) &&
              currentScreen != ZIP_EDITOR && currentScreen != RECORD_SCREEN) {
         if (currentScreen == SUGGESTIONS) {
@@ -309,24 +475,13 @@ void loop() {
     // ======== ZIP EDITOR ========
     if (currentScreen == ZIP_EDITOR) {
 
-        if (joystickMoved(joystickLeft)) {
-            if (zipCursorPos > 0) { zipCursorPos--; drawZipEditor(); }
-        }
-        if (joystickMoved(joystickRight)) {
-            if (zipCursorPos < 4) { zipCursorPos++; drawZipEditor(); }
-        }
-        if (joystickMoved(joystickUp)) {
-            zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 1) % 10 + '0';
-            drawZipEditor();
-        }
-        if (joystickMoved(joystickDown)) {
-            zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 9) % 10 + '0';
-            drawZipEditor();
-        }
+        if (joystickMoved(joystickLeft))  { if (zipCursorPos > 0) { zipCursorPos--; drawZipEditor(); } }
+        if (joystickMoved(joystickRight)) { if (zipCursorPos < 4) { zipCursorPos++; drawZipEditor(); } }
+        if (joystickMoved(joystickUp))    { zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 1) % 10 + '0'; drawZipEditor(); }
+        if (joystickMoved(joystickDown))  { zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 9) % 10 + '0'; drawZipEditor(); }
 
         if (buttonJustPressed(buttons, BUTTON_B)) {
-            Serial.print("ZIP saved: ");
-            Serial.println(zipCode);
+            Serial.printf("[INFO] ZIP saved: %s\n", zipCode);
             flashFeedback(TFT_GREEN);
             currentScreen    = SHOPPING_LIST;
             listScrollOffset = 0;
@@ -337,29 +492,29 @@ void loop() {
     // ======== RECORD SCREEN ========
     else if (currentScreen == RECORD_SCREEN) {
 
-        // A button toggles
-        if (buttonJustPressed(buttons, BUTTON_A)) {
-            toggleRecording();
-        }
-
-        // Touch: tap inside the button to toggle
+        // Tap the red button to toggle RECORD / STOP label
         if (M5.Touch.getCount() > 0) {
             auto t = M5.Touch.getDetail(0);
             if (t.wasPressed()) {
                 if (t.x >= REC_BTN_X && t.x <= REC_BTN_X + REC_BTN_W &&
                     t.y >= REC_BTN_Y && t.y <= REC_BTN_Y + REC_BTN_H) {
-                    toggleRecording();
+                    isRecording = !isRecording;
+                    Serial.println(isRecording ? "[INFO] Button -> STOP" : "[INFO] Button -> RECORD");
+                    drawRecordScreen();
                 }
             }
         }
 
-        // B: exit, auto-stop if recording
+        // A: send record.wav from SD
+        if (buttonJustPressed(buttons, BUTTON_A)) {
+            isRecording = false;  // reset toggle state
+            sendRecording();
+        }
+
+        // B: go back
         if (buttonJustPressed(buttons, BUTTON_B)) {
-            if (isRecording) {
-                isRecording = false;
-                Serial.println("Recording stopped (exited)");
-            }
-            currentScreen    = SHOPPING_LIST;
+            isRecording   = false;
+            currentScreen = SHOPPING_LIST;
             listScrollOffset = 0;
             drawShoppingList();
         }
@@ -368,25 +523,15 @@ void loop() {
     // ======== SUGGESTIONS ========
     else if (currentScreen == SUGGESTIONS) {
 
-        if (joystickMoved(joystickUp)) {
-            if (selectedIndex > 0) { selectedIndex--; drawSuggestions(); }
-        }
-        if (joystickMoved(joystickDown)) {
-            if (selectedIndex < (int)suggestions.size() - 1) { selectedIndex++; drawSuggestions(); }
-        }
+        if (joystickMoved(joystickUp))   { if (selectedIndex > 0) { selectedIndex--; drawSuggestions(); } }
+        if (joystickMoved(joystickDown)) { if (selectedIndex < (int)suggestions.size() - 1) { selectedIndex++; drawSuggestions(); } }
 
         if (buttonJustPressed(buttons, BUTTON_A)) {
             String item = suggestions[selectedIndex];
             bool alreadyAdded = false;
-            for (auto& s : shoppingList) {
-                if (s == item) { alreadyAdded = true; break; }
-            }
-            if (!alreadyAdded) {
-                shoppingList.push_back(item);
-                flashFeedback(TFT_GREEN);
-            } else {
-                flashFeedback(TFT_RED);
-            }
+            for (auto& s : shoppingList) { if (s == item) { alreadyAdded = true; break; } }
+            if (!alreadyAdded) { shoppingList.push_back(item); flashFeedback(TFT_GREEN); }
+            else               { flashFeedback(TFT_RED); }
             drawSuggestions();
         }
     }
@@ -394,12 +539,8 @@ void loop() {
     // ======== SHOPPING LIST ========
     else if (currentScreen == SHOPPING_LIST) {
 
-        if (joystickMoved(joystickUp)) {
-            if (listScrollOffset > 0) { listScrollOffset--; drawShoppingList(); }
-        }
-        if (joystickMoved(joystickDown)) {
-            if (listScrollOffset + MAX_VISIBLE < (int)shoppingList.size()) { listScrollOffset++; drawShoppingList(); }
-        }
+        if (joystickMoved(joystickUp))   { if (listScrollOffset > 0) { listScrollOffset--; drawShoppingList(); } }
+        if (joystickMoved(joystickDown)) { if (listScrollOffset + MAX_VISIBLE < (int)shoppingList.size()) { listScrollOffset++; drawShoppingList(); } }
 
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
