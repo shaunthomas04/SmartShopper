@@ -36,12 +36,6 @@ enum Screen { SHOPPING_LIST, SUGGESTIONS, ZIP_EDITOR, RECORD_SCREEN };
 Screen currentScreen = SHOPPING_LIST;
 
 // ----------- Data -----------
-std::vector<String> shoppingList;
-// std::vector<String> suggestions = {
-//   "Milk", "Eggs", "Bread", "Chicken", "Rice",
-//   "Apples", "Bananas", "Coffee", "Cheese", "Yogurt"
-// };
-
 struct Suggestion {
     String name;
     String link;
@@ -54,6 +48,7 @@ struct Suggestion {
     String distance;
 };
 
+std::vector<Suggestion> shoppingList;
 std::vector<Suggestion> suggestions = {
     {
         "Mainstays Super Soft Plush Blanket",
@@ -170,35 +165,37 @@ void drawUserIdOverlay() {
 // ----------- Draw: Shopping List -----------
 void drawShoppingList() {
     M5.Display.clear();
+
+    // Header
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
     M5.Display.println("Shopping List");
+
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 34);
     M5.Display.println("START=clear  SELECT=switch  X=zip  Y=rec");
-    M5.Display.setTextSize(2);
+
+    // Item display
+    int itemSpacing = 18; // same as suggestions
+    int startY = 50;
 
     if (shoppingList.empty()) {
         M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        M5.Display.setCursor(10, 55);
+        M5.Display.setCursor(10, startY);
         M5.Display.println("(Empty)");
     } else {
-        int visible = min((int)shoppingList.size() - listScrollOffset, MAX_VISIBLE);
-        for (int i = 0; i < visible; i++) {
-            int idx = i + listScrollOffset;
-            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-            M5.Display.setCursor(10, 50 + i * 20);
-            M5.Display.println("- " + shoppingList[idx]);
-        }
-        if ((int)shoppingList.size() > MAX_VISIBLE) {
+        for (int i = 0; i < (int)shoppingList.size(); i++) {
+            int y = startY + i * itemSpacing;
+
             M5.Display.setTextSize(1);
-            M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-            M5.Display.setCursor(10, 50 + MAX_VISIBLE * 20);
-            M5.Display.printf("(%d items, scroll with stick)", (int)shoppingList.size());
+            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            M5.Display.setCursor(10, y);
+            M5.Display.printf("%s - %s", shoppingList[i].price.c_str(), shoppingList[i].name.c_str());
         }
     }
+
     drawUserIdOverlay();
 }
 
@@ -614,22 +611,21 @@ void loop() {
         }
 
         if (buttonJustPressed(buttons, BUTTON_A)) {
-            String itemName = suggestions[selectedIndex].name;  // get the selected item's name
+            const Suggestion& selectedItem = suggestions[selectedIndex];  // get the selected suggestion
             bool alreadyAdded = false;
 
             // check if the item is already in the shopping list
             for (auto& s : shoppingList) { 
-                if (s == itemName) { 
+                if (s.name == selectedItem.name) { 
                     alreadyAdded = true; 
                     break; 
                 } 
             }
 
             if (!alreadyAdded) { 
-                shoppingList.push_back(itemName); // add the item by name
+                shoppingList.push_back(selectedItem); // add the full Suggestion
                 flashFeedback(TFT_GREEN); 
-            }
-            else { 
+            } else { 
                 flashFeedback(TFT_RED); 
             }
 
