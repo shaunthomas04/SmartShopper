@@ -11,7 +11,7 @@ const char* WIFI_PASSWORD = "L@ncerN@tion";
 const String USER_ID      = "shaun2026";
 
 // ----------- Endpoint -----------
-const String ENDPOINT = "https://smart-shopper-967923575473.europe-west1.run.app";
+const String ENDPOINT = "https://smart-shopper-967923575473.europe-west1.run.app/";
 
 // ----------- Hardcoded WAV file on SD -----------
 const char* WAV_PATH = "/record.wav";
@@ -264,7 +264,7 @@ void drawRecordScreen() {
 
 // ----------- Send /record.wav from SD via HTTP POST -----------
 void sendRecording() {
-    // Show sending screen
+    // 1. UI: Show sending screen
     M5.Display.clear();
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -280,110 +280,104 @@ void sendRecording() {
     M5.Display.printf("User : %s", USER_ID.c_str());
     drawUserIdOverlay();
 
-    // Open WAV file from SD
+    // 2. Open WAV file from SD
     File wavFile = SD.open(WAV_PATH, FILE_READ);
     if (!wavFile) {
-        Serial.println("[ERROR] Could not open /record.wav from SD card");
+        Serial.println("[ERROR] Could not open /record.wav");
         M5.Display.setTextColor(TFT_RED, TFT_BLACK);
         M5.Display.setCursor(10, 100);
         M5.Display.println("SD file not found!");
-        drawUserIdOverlay();
         delay(2000);
         drawRecordScreen();
         return;
     }
 
     size_t fileSize = wavFile.size();
-    Serial.printf("[INFO] Opened %s — %d bytes\n", WAV_PATH, fileSize);
-
-    // Read entire file into RAM buffer
     uint8_t* wavBuf = (uint8_t*)malloc(fileSize);
     if (!wavBuf) {
-        Serial.println("[ERROR] Not enough RAM to buffer WAV file");
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.setCursor(10, 100);
-        M5.Display.println("Out of memory!");
+        Serial.println("[ERROR] Out of RAM");
         wavFile.close();
-        drawUserIdOverlay();
-        delay(2000);
-        drawRecordScreen();
         return;
     }
     wavFile.read(wavBuf, fileSize);
     wavFile.close();
 
-    // Connect WiFi if needed
+    // 3. Robust WiFi Check
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[INFO] WiFi not connected, reconnecting...");
-        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-        M5.Display.setCursor(10, 100);
-        M5.Display.println("Connecting WiFi...");
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
         int tries = 0;
-        while (WiFi.status() != WL_CONNECTED && tries < 30) {
+        while (WiFi.status() != WL_CONNECTED && tries < 20) {
             delay(500);
             tries++;
         }
     }
 
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[ERROR] WiFi connection failed");
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.setCursor(10, 120);
-        M5.Display.println("WiFi failed!");
+        Serial.println("[ERROR] WiFi Failed");
         free(wavBuf);
-        drawUserIdOverlay();
-        delay(2000);
-        drawRecordScreen();
         return;
     }
 
-    // Build URL
-    String url = ENDPOINT + "?zipCode=" + String(zipCode) + "&userId=" + USER_ID;
-    Serial.printf("[INFO] POST to: %s\n", url.c_str());
+    // Print IP to Serial - if this is 0.0.0.0, DNS will fail
+    Serial.print("[INFO] Connected! IP: ");
+    Serial.println(WiFi.localIP());
+
+    // 4. Corrected HTTP Logic
+    String url = ENDPOINT + "?zipCode=" + String(zipCode);
+    Serial.printf("[INFO] Attempting POST to: %s\n", url.c_str());
+
+    WiFiClientSecure client;
+    client.setInsecure(); // Required for Cloud Run / HTTPS without cert management
 
     HTTPClient http;
-    http.begin(url);
-    http.addHeader("Content-Type", "audio/wav");
-    http.addHeader("X-User-Id", USER_ID);
-    http.setTimeout(15000);  // 15s timeout for large files
+    // .begin() returns false if the URL/SSL setup is invalid
+    if (http.begin(client, url)) {
+        http.addHeader("Content-Type", "audio/wav");
+        http.setTimeout(60000); 
 
-    int httpCode = http.POST(wavBuf, fileSize);
-    free(wavBuf);
+        int httpCode = http.POST(wavBuf, fileSize);
+        String responseBody = "";
 
-    String responseBody = http.getString();
+        if (httpCode > 0) {
+            responseBody = http.getString();
+        } else {
+            // Converts error code (like -1) into a human readable string
+            responseBody = "Error: " + String(http.errorToString(httpCode).c_str());
+        }
 
-    // Serial output
-    Serial.println("========== HTTP RESPONSE ==========");
-    Serial.printf("HTTP Code : %d\n", httpCode);
-    Serial.printf("Response  : %s\n", responseBody.c_str());
-    Serial.println("===================================");
+        // Serial Logging
+        Serial.println("========== HTTP RESPONSE ==========");
+        Serial.printf("HTTP Code : %d\n", httpCode);
+        Serial.printf("Response  : %s\n", responseBody.c_str());
+        Serial.println("===================================");
 
-    http.end();
+        // 5. UI: Show Result
+        M5.Display.clear();
+        M5.Display.setTextSize(2);
+        if (httpCode == HTTP_CODE_OK || httpCode == 201) {
+            M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+            M5.Display.setCursor(10, 20);
+            M5.Display.printf("SUCCESS (%d)", httpCode);
+        } else {
+            M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+            M5.Display.setCursor(10, 20);
+            M5.Display.printf("FAILED (%d)", httpCode);
+        }
 
-    // Show result on screen
-    M5.Display.clear();
-    M5.Display.setTextSize(2);
-    if (httpCode > 0) {
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-        M5.Display.setCursor(10, 20);
-        M5.Display.printf("HTTP %d OK", httpCode);
+        M5.Display.setTextSize(1);
+        M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+        M5.Display.setCursor(10, 55);
+        M5.Display.println("Response:");
+        M5.Display.setCursor(10, 70);
+        M5.Display.println(responseBody.substring(0, 200));
+
+        http.end();
     } else {
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.setCursor(10, 20);
-        M5.Display.printf("Error %d", httpCode);
+        Serial.println("[ERROR] HTTP.begin failed - Check URL format");
     }
 
-    // Show first ~200 chars of response body on screen
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    M5.Display.setCursor(10, 55);
-    M5.Display.println("Response:");
-    M5.Display.setCursor(10, 68);
-    // Wrap long responses so they fit on screen
-    String preview = responseBody.substring(0, 220);
-    M5.Display.println(preview);
-
+    // 6. Cleanup
+    free(wavBuf);
     drawUserIdOverlay();
     delay(3000);
     drawRecordScreen();
