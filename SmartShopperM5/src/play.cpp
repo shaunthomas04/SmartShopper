@@ -39,13 +39,19 @@ int  zipCursorPos = 0;
 // ----------- Record State -----------
 bool isRecording = false;
 
+// ----------- Record button bounds -----------
+const int REC_BTN_X = 60;
+const int REC_BTN_Y = 80;
+const int REC_BTN_W = 200;
+const int REC_BTN_H = 80;
+const int REC_BTN_R = 12;
+
 // ----------- Joystick helpers -----------
 const int CENTER   = 512;
 const int DEADZONE = 100;
 
 bool joystickUp()    { return (1023 - ss.analogRead(15)) > CENTER + DEADZONE; }
 bool joystickDown()  { return (1023 - ss.analogRead(15)) < CENTER - DEADZONE; }
-// Inverted left/right to match physical orientation
 bool joystickLeft()  { return ss.analogRead(14) > CENTER + DEADZONE; }
 bool joystickRight() { return ss.analogRead(14) < CENTER - DEADZONE; }
 
@@ -185,46 +191,51 @@ void drawZipEditor() {
 void drawRecordScreen() {
     M5.Display.clear();
 
+    // Title
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
     M5.Display.println("Record");
 
+    // Instructions
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 38);
-    M5.Display.println("A = toggle  B = go back");
+    M5.Display.println("A or tap button = toggle  B = go back");
 
-    const int btnX = 60;
-    const int btnY = 80;
-    const int btnW = 200;
-    const int btnH = 80;
-    const int btnR = 12;
+    // Always draw the red button
+    M5.Display.fillRoundRect(REC_BTN_X, REC_BTN_Y, REC_BTN_W, REC_BTN_H, REC_BTN_R, TFT_RED);
 
-    if (!isRecording) {
-        // Red RECORD button
-        M5.Display.fillRoundRect(btnX, btnY, btnW, btnH, btnR, TFT_RED);
-        M5.Display.setTextSize(3);
-        M5.Display.setTextColor(TFT_WHITE, TFT_RED);
-        M5.Display.setCursor(btnX + 28, btnY + 24);
-        M5.Display.print("RECORD");
+    // Center label inside the button — textSize 3 = 18px wide, 24px tall per char
+    const char* label = isRecording ? "STOP" : "RECORD";
+    const int charW   = 18;
+    const int charH   = 24;
+    int textW  = strlen(label) * charW;
+    int textX  = REC_BTN_X + (REC_BTN_W - textW) / 2;
+    int textY  = REC_BTN_Y + (REC_BTN_H - charH) / 2;
 
-        // Circle icon beneath
-        M5.Display.fillCircle(btnX + btnW / 2, btnY + btnH + 24, 8, TFT_RED);
-    } else {
-        // Dark red STOP button
-        M5.Display.fillRoundRect(btnX, btnY, btnW, btnH, btnR, 0x8000);
-        M5.Display.setTextSize(3);
-        M5.Display.setTextColor(TFT_WHITE, 0x8000);
-        M5.Display.setCursor(btnX + 52, btnY + 24);
-        M5.Display.print("STOP");
+    M5.Display.setTextSize(3);
+    M5.Display.setTextColor(TFT_WHITE, TFT_RED);
+    M5.Display.setCursor(textX, textY);
+    M5.Display.print(label);
 
-        // Blinking REC indicator
+    // REC indicator below button — only when recording
+    if (isRecording) {
         M5.Display.setTextSize(1);
         M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.setCursor(btnX + 60, btnY + btnH + 16);
-        M5.Display.print("● REC");
+        // Center "● REC" below button
+        const char* recLabel = "* REC";
+        int recW = strlen(recLabel) * 6;
+        M5.Display.setCursor((320 - recW) / 2, REC_BTN_Y + REC_BTN_H + 16);
+        M5.Display.print(recLabel);
     }
+}
+
+// ----------- Toggle recording -----------
+void toggleRecording() {
+    isRecording = !isRecording;
+    Serial.println(isRecording ? "Recording started" : "Recording stopped");
+    drawRecordScreen();
 }
 
 // ----------- Feedback flash -----------
@@ -326,14 +337,23 @@ void loop() {
     // ======== RECORD SCREEN ========
     else if (currentScreen == RECORD_SCREEN) {
 
-        // A: toggle record <-> stop
+        // A button toggles
         if (buttonJustPressed(buttons, BUTTON_A)) {
-            isRecording = !isRecording;
-            Serial.println(isRecording ? "Recording started" : "Recording stopped");
-            drawRecordScreen();
+            toggleRecording();
         }
 
-        // B: exit (auto-stops if recording)
+        // Touch: tap inside the button to toggle
+        if (M5.Touch.getCount() > 0) {
+            auto t = M5.Touch.getDetail(0);
+            if (t.wasPressed()) {
+                if (t.x >= REC_BTN_X && t.x <= REC_BTN_X + REC_BTN_W &&
+                    t.y >= REC_BTN_Y && t.y <= REC_BTN_Y + REC_BTN_H) {
+                    toggleRecording();
+                }
+            }
+        }
+
+        // B: exit, auto-stop if recording
         if (buttonJustPressed(buttons, BUTTON_B)) {
             if (isRecording) {
                 isRecording = false;
