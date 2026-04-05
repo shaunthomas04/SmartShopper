@@ -364,14 +364,14 @@ void updateSuggestions(String serverResponse){
 
     for (JsonObject item : shoppingResults) {
             Suggestion s;
-            s.name     = item["name"] | "";
-            s.link     = item["link"] | "";
-            s.image    = item["image"] | "";
-            s.price    = item["price"] | "";
-            s.cost     = item["cost"] | 0.0;
-            s.rating   = item["rating"] | 0.0;
-            s.reviews  = item["reviews"] | 0;
-            s.store    = item["store"] | "";
+            s.name = item["name"] | "";
+            s.link = item["link"] | "";
+            s.image = item["image"] | "";
+            s.price = item["price"] | "";
+            s.cost = item["cost"] | 0.0;
+            s.rating = item["rating"] | 0.0;
+            s.reviews = item["reviews"] | 0;
+            s.store = item["store"] | "";
             s.distance = item["distance"] | "";
 
             responseSuggestions.push_back(s);
@@ -460,7 +460,7 @@ void sendRecording() {
 
         if (httpCode > 0) {
             responseBody = http.getString();
-            // updateSuggestions(responseBody);
+            updateSuggestions(responseBody);
         } else {
             // Converts error code (like -1) into a human readable string
             responseBody = "Error: " + String(http.errorToString(httpCode).c_str());
