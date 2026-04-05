@@ -37,10 +37,81 @@ Screen currentScreen = SHOPPING_LIST;
 
 // ----------- Data -----------
 std::vector<String> shoppingList;
-std::vector<String> suggestions = {
-  "Milk", "Eggs", "Bread", "Chicken", "Rice",
-  "Apples", "Bananas", "Coffee", "Cheese", "Yogurt"
+// std::vector<String> suggestions = {
+//   "Milk", "Eggs", "Bread", "Chicken", "Rice",
+//   "Apples", "Bananas", "Coffee", "Cheese", "Yogurt"
+// };
+
+struct Suggestion {
+    String name;
+    String link;
+    String image;
+    String price;
+    float cost;
+    float rating;
+    int reviews;
+    String store;
+    String distance;
 };
+
+std::vector<Suggestion> suggestions = {
+    {
+        "Mainstays Super Soft Plush Blanket",
+        "https://example.com/blanket1",
+        "https://example.com/images/blanket1.jpg",
+        "$21.64",
+        21.64,
+        4.5,
+        3500,
+        "Walmart",
+        "Nearby, 15 mi"
+    },
+    {
+        "Less Stress Package Unwind & Recharge",
+        "https://example.com/relaxation1",
+        "https://example.com/images/relaxation1.jpg",
+        "$89.99",
+        89.99,
+        4.8,
+        144,
+        "Spoonful of Comfort",
+        "Online"
+    },
+    {
+        "Celestial Seasonings Everyday Wellness Tea Pack",
+        "https://example.com/tea1",
+        "https://example.com/images/tea1.jpg",
+        "$5.49",
+        5.49,
+        4.8,
+        75,
+        "Target",
+        "Nearby, 5 mi"
+    },
+    {
+        "FlexWorks Shiatsu Pillow Massager",
+        "https://example.com/massager1",
+        "https://example.com/images/massager1.jpg",
+        "$19.88",
+        19.88,
+        3.5,
+        144,
+        "Walmart",
+        "Nearby, 12 mi"
+    },
+    {
+        "Threshold Essential Oil Diffuser",
+        "https://example.com/diffuser1",
+        "https://example.com/images/diffuser1.jpg",
+        "$20.00",
+        20.00,
+        2.4,
+        79,
+        "Target",
+        "Nearby, 5 mi"
+    }
+};
+
 
 int selectedIndex    = 0;
 int listScrollOffset = 0;
@@ -134,28 +205,39 @@ void drawShoppingList() {
 // ----------- Draw: Suggestions -----------
 void drawSuggestions() {
     M5.Display.clear();
+    
+    // Header
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
     M5.Display.println("Add Item");
+    
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 34);
     M5.Display.println("A=add  SELECT=switch  X=zip  Y=rec");
-    M5.Display.setTextSize(2);
+
+    // Item display
+    int itemSpacing = 18;  // vertical spacing between items
+    int startY = 50;
 
     for (int i = 0; i < (int)suggestions.size(); i++) {
-        int y = 50 + i * 20;
+        int y = startY + i * itemSpacing;
+
+        // Highlight selected item
         if (i == selectedIndex) {
-            M5.Display.fillRect(0, y - 2, 320, 20, TFT_BLUE);
+            M5.Display.fillRect(0, y - 2, 320, itemSpacing, TFT_BLUE);
             M5.Display.setTextColor(TFT_WHITE, TFT_BLUE);
         } else {
             M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
         }
+
+        // Display price - name
+        M5.Display.setTextSize(1);
         M5.Display.setCursor(10, y);
-        M5.Display.println(suggestions[i]);
+        M5.Display.printf("%s - %s", suggestions[i].price.c_str(), suggestions[i].name.c_str());
     }
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+
     drawUserIdOverlay();
 }
 
@@ -517,15 +599,40 @@ void loop() {
     // ======== SUGGESTIONS ========
     else if (currentScreen == SUGGESTIONS) {
 
-        if (joystickMoved(joystickUp))   { if (selectedIndex > 0) { selectedIndex--; drawSuggestions(); } }
-        if (joystickMoved(joystickDown)) { if (selectedIndex < (int)suggestions.size() - 1) { selectedIndex++; drawSuggestions(); } }
+        if (joystickMoved(joystickUp))   { 
+            if (selectedIndex > 0) { 
+                selectedIndex--; 
+                drawSuggestions(); 
+            } 
+        }
+
+        if (joystickMoved(joystickDown)) { 
+            if (selectedIndex < (int)suggestions.size() - 1) { 
+                selectedIndex++; 
+                drawSuggestions(); 
+            } 
+        }
 
         if (buttonJustPressed(buttons, BUTTON_A)) {
-            String item = suggestions[selectedIndex];
+            String itemName = suggestions[selectedIndex].name;  // get the selected item's name
             bool alreadyAdded = false;
-            for (auto& s : shoppingList) { if (s == item) { alreadyAdded = true; break; } }
-            if (!alreadyAdded) { shoppingList.push_back(item); flashFeedback(TFT_GREEN); }
-            else               { flashFeedback(TFT_RED); }
+
+            // check if the item is already in the shopping list
+            for (auto& s : shoppingList) { 
+                if (s == itemName) { 
+                    alreadyAdded = true; 
+                    break; 
+                } 
+            }
+
+            if (!alreadyAdded) { 
+                shoppingList.push_back(itemName); // add the item by name
+                flashFeedback(TFT_GREEN); 
+            }
+            else { 
+                flashFeedback(TFT_RED); 
+            }
+
             drawSuggestions();
         }
     }
