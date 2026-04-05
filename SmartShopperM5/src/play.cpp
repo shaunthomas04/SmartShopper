@@ -18,7 +18,7 @@ uint32_t button_mask = (1UL << BUTTON_X) | (1UL << BUTTON_Y) | (1UL << BUTTON_ST
 uint32_t lastButtons = 0;
 
 // ----------- App State -----------
-enum Screen { SHOPPING_LIST, SUGGESTIONS, ZIP_EDITOR };
+enum Screen { SHOPPING_LIST, SUGGESTIONS, ZIP_EDITOR, RECORD_SCREEN };
 Screen currentScreen = SHOPPING_LIST;
 
 // ----------- Data -----------
@@ -33,8 +33,11 @@ int listScrollOffset = 0;
 const int MAX_VISIBLE = 9;
 
 // ----------- ZIP Code -----------
-char zipCode[6] = "95762";   // default zip, null-terminated
-int  zipCursorPos = 0;       // which digit (0-4) is selected
+char zipCode[6]   = "95762";
+int  zipCursorPos = 0;
+
+// ----------- Record State -----------
+bool isRecording = false;
 
 // ----------- Joystick helpers -----------
 const int CENTER   = 512;
@@ -42,8 +45,9 @@ const int DEADZONE = 100;
 
 bool joystickUp()    { return (1023 - ss.analogRead(15)) > CENTER + DEADZONE; }
 bool joystickDown()  { return (1023 - ss.analogRead(15)) < CENTER - DEADZONE; }
-bool joystickLeft()  { return ss.analogRead(14) < CENTER - DEADZONE; }
-bool joystickRight() { return ss.analogRead(14) > CENTER + DEADZONE; }
+// Inverted left/right to match physical orientation
+bool joystickLeft()  { return ss.analogRead(14) > CENTER + DEADZONE; }
+bool joystickRight() { return ss.analogRead(14) < CENTER - DEADZONE; }
 
 unsigned long lastJoyMove = 0;
 const int JOY_REPEAT_MS   = 180;
@@ -71,7 +75,7 @@ void drawShoppingList() {
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 34);
-    M5.Display.println("START=clear  SELECT=switch  X=zip");
+    M5.Display.println("START=clear  SELECT=switch  X=zip  Y=rec");
     M5.Display.setTextSize(2);
 
     if (shoppingList.empty()) {
@@ -107,7 +111,7 @@ void drawSuggestions() {
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 34);
-    M5.Display.println("A=add  SELECT=switch  X=zip");
+    M5.Display.println("A=add  SELECT=switch  X=zip  Y=rec");
     M5.Display.setTextSize(2);
 
     for (int i = 0; i < (int)suggestions.size(); i++) {
@@ -128,34 +132,27 @@ void drawSuggestions() {
 void drawZipEditor() {
     M5.Display.clear();
 
-    // Title
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
     M5.Display.println("Edit ZIP Code");
 
-    // Instructions
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 38);
     M5.Display.println("UP/DOWN=change digit  LEFT/RIGHT=move  B=save");
 
-    // Draw each digit — large, spaced out
-    const int DIGIT_W    = 36;
-    const int DIGIT_H    = 50;
-    const int START_X    = 40;
-    const int DIGIT_Y    = 80;
-    const int SPACING    = 48;
+    const int DIGIT_W  = 36;
+    const int DIGIT_H  = 50;
+    const int START_X  = 40;
+    const int DIGIT_Y  = 80;
+    const int SPACING  = 48;
 
     for (int i = 0; i < 5; i++) {
         int x = START_X + i * SPACING;
 
         if (i == zipCursorPos) {
-            // Highlighted box
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_BLUE);
-            M5.Display.setTextColor(TFT_WHITE, TFT_BLUE);
-
-            // Up/down arrows above and below
             M5.Display.setTextSize(1);
             M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
             M5.Display.setCursor(x + 6, DIGIT_Y - 16);
@@ -164,27 +161,70 @@ void drawZipEditor() {
             M5.Display.print("v");
         } else {
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_DARKGREY);
-            M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREY);
         }
 
-        // Draw the digit (big)
         M5.Display.setTextSize(4);
+        M5.Display.setTextColor(TFT_WHITE, i == zipCursorPos ? TFT_BLUE : TFT_DARKGREY);
         M5.Display.setCursor(x, DIGIT_Y + 8);
         M5.Display.print(zipCode[i]);
     }
 
-    // Show current full ZIP below
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
     M5.Display.setCursor(10, 160);
     M5.Display.print("ZIP: ");
     M5.Display.println(zipCode);
 
-    // Hint: what pressing B will do
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.setCursor(10, 190);
     M5.Display.println("B = Save & go back");
+}
+
+// ----------- Draw: Record Screen -----------
+void drawRecordScreen() {
+    M5.Display.clear();
+
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(10, 10);
+    M5.Display.println("Record");
+
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.setCursor(10, 38);
+    M5.Display.println("A = toggle  B = go back");
+
+    const int btnX = 60;
+    const int btnY = 80;
+    const int btnW = 200;
+    const int btnH = 80;
+    const int btnR = 12;
+
+    if (!isRecording) {
+        // Red RECORD button
+        M5.Display.fillRoundRect(btnX, btnY, btnW, btnH, btnR, TFT_RED);
+        M5.Display.setTextSize(3);
+        M5.Display.setTextColor(TFT_WHITE, TFT_RED);
+        M5.Display.setCursor(btnX + 28, btnY + 24);
+        M5.Display.print("RECORD");
+
+        // Circle icon beneath
+        M5.Display.fillCircle(btnX + btnW / 2, btnY + btnH + 24, 8, TFT_RED);
+    } else {
+        // Dark red STOP button
+        M5.Display.fillRoundRect(btnX, btnY, btnW, btnH, btnR, 0x8000);
+        M5.Display.setTextSize(3);
+        M5.Display.setTextColor(TFT_WHITE, 0x8000);
+        M5.Display.setCursor(btnX + 52, btnY + 24);
+        M5.Display.print("STOP");
+
+        // Blinking REC indicator
+        M5.Display.setTextSize(1);
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(btnX + 60, btnY + btnH + 16);
+        M5.Display.print("● REC");
+    }
 }
 
 // ----------- Feedback flash -----------
@@ -231,15 +271,20 @@ void loop() {
 
     uint32_t buttons = ss.digitalReadBulk(button_mask);
 
-    // -------- X button: open ZIP editor from any screen --------
-    if (buttonJustPressed(buttons, BUTTON_X)) {
+    // -------- X: open ZIP editor --------
+    if (buttonJustPressed(buttons, BUTTON_X) && currentScreen != ZIP_EDITOR) {
         zipCursorPos  = 0;
         currentScreen = ZIP_EDITOR;
         drawZipEditor();
     }
-
-    // -------- SELECT: toggle between Shopping List and Suggestions --------
-    else if (buttonJustPressed(buttons, BUTTON_SELECT) && currentScreen != ZIP_EDITOR) {
+    // -------- Y: open Record screen --------
+    else if (buttonJustPressed(buttons, BUTTON_Y) && currentScreen != RECORD_SCREEN) {
+        currentScreen = RECORD_SCREEN;
+        drawRecordScreen();
+    }
+    // -------- SELECT: toggle Shopping List / Suggestions --------
+    else if (buttonJustPressed(buttons, BUTTON_SELECT) &&
+             currentScreen != ZIP_EDITOR && currentScreen != RECORD_SCREEN) {
         if (currentScreen == SUGGESTIONS) {
             currentScreen    = SHOPPING_LIST;
             listScrollOffset = 0;
@@ -250,36 +295,24 @@ void loop() {
         }
     }
 
-    // ======== ZIP EDITOR screen ========
+    // ======== ZIP EDITOR ========
     if (currentScreen == ZIP_EDITOR) {
 
-        // Left/right to move cursor between digits
         if (joystickMoved(joystickLeft)) {
-            if (zipCursorPos > 0) {
-                zipCursorPos--;
-                drawZipEditor();
-            }
+            if (zipCursorPos > 0) { zipCursorPos--; drawZipEditor(); }
         }
         if (joystickMoved(joystickRight)) {
-            if (zipCursorPos < 4) {
-                zipCursorPos++;
-                drawZipEditor();
-            }
+            if (zipCursorPos < 4) { zipCursorPos++; drawZipEditor(); }
         }
-
-        // Up: increment digit (wraps 9 -> 0)
         if (joystickMoved(joystickUp)) {
             zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 1) % 10 + '0';
             drawZipEditor();
         }
-
-        // Down: decrement digit (wraps 0 -> 9)
         if (joystickMoved(joystickDown)) {
             zipCode[zipCursorPos] = (zipCode[zipCursorPos] - '0' + 9) % 10 + '0';
             drawZipEditor();
         }
 
-        // B: save and return to shopping list
         if (buttonJustPressed(buttons, BUTTON_B)) {
             Serial.print("ZIP saved: ");
             Serial.println(zipCode);
@@ -290,7 +323,29 @@ void loop() {
         }
     }
 
-    // ======== SUGGESTIONS screen ========
+    // ======== RECORD SCREEN ========
+    else if (currentScreen == RECORD_SCREEN) {
+
+        // A: toggle record <-> stop
+        if (buttonJustPressed(buttons, BUTTON_A)) {
+            isRecording = !isRecording;
+            Serial.println(isRecording ? "Recording started" : "Recording stopped");
+            drawRecordScreen();
+        }
+
+        // B: exit (auto-stops if recording)
+        if (buttonJustPressed(buttons, BUTTON_B)) {
+            if (isRecording) {
+                isRecording = false;
+                Serial.println("Recording stopped (exited)");
+            }
+            currentScreen    = SHOPPING_LIST;
+            listScrollOffset = 0;
+            drawShoppingList();
+        }
+    }
+
+    // ======== SUGGESTIONS ========
     else if (currentScreen == SUGGESTIONS) {
 
         if (joystickMoved(joystickUp)) {
@@ -316,7 +371,7 @@ void loop() {
         }
     }
 
-    // ======== SHOPPING LIST screen ========
+    // ======== SHOPPING LIST ========
     else if (currentScreen == SHOPPING_LIST) {
 
         if (joystickMoved(joystickUp)) {
