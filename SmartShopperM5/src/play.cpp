@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <SD.h>
 #include <vector>
+#include <ArduinoJson.h>
 
 // ----------- WiFi & User -----------
 const char* WIFI_SSID     = "CBU-LANCERS";
@@ -341,6 +342,46 @@ void drawRecordScreen() {
     drawUserIdOverlay();
 }
 
+// convert the http response to suggestions struct
+void updateSuggestions(String serverResponse){
+    const size_t jsonCapacity = 768+250;
+    DynamicJsonDocument objResponse(jsonCapacity);
+
+    if (serverResponse == "INVALID"){
+        Serial.print("Invalid server response");
+    }
+
+    DeserializationError error = deserializeJson(objResponse, serverResponse);
+    if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+    }
+
+    // Parse Response to get suggestions
+    std::vector<Suggestion> responseSuggestions; 
+    JsonArray shoppingResults = objResponse["shoppingResults"];
+
+
+    for (JsonObject item : shoppingResults) {
+            Suggestion s;
+            s.name     = item["name"] | "";
+            s.link     = item["link"] | "";
+            s.image    = item["image"] | "";
+            s.price    = item["price"] | "";
+            s.cost     = item["cost"] | 0.0;
+            s.rating   = item["rating"] | 0.0;
+            s.reviews  = item["reviews"] | 0;
+            s.store    = item["store"] | "";
+            s.distance = item["distance"] | "";
+
+            responseSuggestions.push_back(s);
+    }
+
+    suggestions = responseSuggestions;
+}
+
+
+
 // ----------- Send /record.wav from SD via HTTP POST -----------
 void sendRecording() {
     // 1. UI: Show sending screen
@@ -419,6 +460,7 @@ void sendRecording() {
 
         if (httpCode > 0) {
             responseBody = http.getString();
+            // updateSuggestions(responseBody);
         } else {
             // Converts error code (like -1) into a human readable string
             responseBody = "Error: " + String(http.errorToString(httpCode).c_str());
