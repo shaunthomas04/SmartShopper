@@ -48,10 +48,11 @@ void drawShoppingList() {
     drawUserIdOverlay();
 }
 
-// ----------- Draw: Suggestions -----------
+// ----------- Draw: Suggestions (with Scrolling) -----------
 void drawSuggestions() {
     M5.Display.clear();
 
+    // Header section
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
@@ -64,11 +65,29 @@ void drawSuggestions() {
 
     const int itemSpacing = 18;
     const int startY      = 50;
+    const int maxVisible  = 10; // Adjust this based on your screen height
 
-    for (int i = 0; i < (int)suggestions.size(); i++) {
-        int y = startY + i * itemSpacing;
+    // --- Scrolling Logic ---
+    static int topIndex = 0; // Tracks which item is at the top of the list
+    
+    // If selection goes below the visible window, scroll down
+    if (selectedIndex >= topIndex + maxVisible) {
+        topIndex = selectedIndex - maxVisible + 1;
+    }
+    // If selection goes above the visible window, scroll up
+    if (selectedIndex < topIndex) {
+        topIndex = selectedIndex;
+    }
+
+    // Determine how many items we can actually draw
+    int endIndex = min((int)suggestions.size(), topIndex + maxVisible);
+
+    for (int i = topIndex; i < endIndex; i++) {
+        // Calculate Y relative to the topIndex
+        int y = startY + (i - topIndex) * itemSpacing;
 
         if (i == selectedIndex) {
+            // Highlight bar
             M5.Display.fillRect(0, y - 2, 320, itemSpacing, TFT_BLUE);
             M5.Display.setTextColor(TFT_WHITE, TFT_BLUE);
         } else {
