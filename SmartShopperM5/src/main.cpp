@@ -154,17 +154,28 @@ void loop() {
 
     // ======== SHOPPING LIST ========
     else if (currentScreen == SHOPPING_LIST) {
+        
+        // Move selection UP
         if (joystickMoved(joystickUp)) {
-            if (listScrollOffset > 0) { listScrollOffset--; drawShoppingList(); }
+            if (selectedIndex > 0) { 
+                selectedIndex--; 
+                drawShoppingList(); 
+            }
         }
+        
+        // Move selection DOWN
         if (joystickMoved(joystickDown)) {
-            if (listScrollOffset + MAX_VISIBLE < (int)shoppingList.size()) { listScrollOffset++; drawShoppingList(); }
+            if (selectedIndex < (int)shoppingList.size() - 1) { 
+                selectedIndex++; 
+                drawShoppingList(); 
+            }
         }
 
+        // Clear List
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
             bleNotifyShoppingList();
-            listScrollOffset = 0;
+            selectedIndex = 0;    
             drawShoppingList();
         }
     }

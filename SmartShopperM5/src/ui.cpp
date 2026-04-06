@@ -12,10 +12,11 @@ void drawUserIdOverlay() {
     M5.Display.print(USER_ID);
 }
 
-// ----------- Draw: Shopping List -----------
+// ----------- Draw: Shopping List (with Scrolling & Highlighting) -----------
 void drawShoppingList() {
     M5.Display.clear();
 
+    // Header section
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
@@ -28,16 +29,39 @@ void drawShoppingList() {
 
     const int itemSpacing = 18;
     const int startY      = 50;
+    const int maxVisible  = 10; // Number of items that fit on screen
 
     if (shoppingList.empty()) {
         M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
         M5.Display.setCursor(10, startY);
         M5.Display.println("(Empty)");
     } else {
-        for (int i = 0; i < (int)shoppingList.size(); i++) {
-            int y = startY + i * itemSpacing;
+        // --- Scrolling Logic ---
+        static int listTopIndex = 0; 
+        
+        // Adjust the "window" based on selectedIndex
+        if (selectedIndex >= listTopIndex + maxVisible) {
+            listTopIndex = selectedIndex - maxVisible + 1;
+        }
+        if (selectedIndex < listTopIndex) {
+            listTopIndex = selectedIndex;
+        }
+
+        int endIndex = min((int)shoppingList.size(), listTopIndex + maxVisible);
+
+        for (int i = listTopIndex; i < endIndex; i++) {
+            // Calculate Y relative to the scroll position
+            int y = startY + (i - listTopIndex) * itemSpacing;
+
+            if (i == selectedIndex) {
+                // Blue selection bar
+                M5.Display.fillRect(0, y - 2, 320, itemSpacing, TFT_BLUE);
+                M5.Display.setTextColor(TFT_WHITE, TFT_BLUE);
+            } else {
+                M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            }
+
             M5.Display.setTextSize(1);
-            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
             M5.Display.setCursor(10, y);
             M5.Display.printf("%s - %s",
                 shoppingList[i].price.c_str(),
