@@ -145,85 +145,83 @@ void drawZipEditor() {
     const int DIGIT_W = 36;
     const int DIGIT_H = 50;
     const int START_X = 40;
-    const int DIGIT_Y = 80;
+    
+    // Adjusted DIGIT_Y slightly to center the whole row on the screen better
+    const int DIGIT_Y = 100; 
     const int SPACING = 48;
 
     for (int i = 0; i < 5; i++) {
         int x = START_X + i * SPACING;
+        
         if (i == zipCursorPos) {
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_BLUE);
             M5.Display.setTextSize(1);
             M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
-            M5.Display.setCursor(x + 6, DIGIT_Y - 16);
+            
+            // Carets centered horizontally relative to the digit
+            M5.Display.setCursor(x + 10, DIGIT_Y - 16);
             M5.Display.print("^");
-            M5.Display.setCursor(x + 6, DIGIT_Y + DIGIT_H);
+            M5.Display.setCursor(x + 10, DIGIT_Y + DIGIT_H + 2);
             M5.Display.print("v");
         } else {
             M5.Display.fillRoundRect(x - 4, DIGIT_Y - 4, DIGIT_W, DIGIT_H, 6, TFT_DARKGREY);
         }
+
         M5.Display.setTextSize(4);
         M5.Display.setTextColor(TFT_WHITE, i == zipCursorPos ? TFT_BLUE : TFT_DARKGREY);
-        M5.Display.setCursor(x, DIGIT_Y + 8);
+        
+        // Vertical centering logic:
+        // Box is 50px high. Text size 4 is ~28px high.
+        // (50 - 28) / 2 = 11 pixels of padding.
+        M5.Display.setCursor(x, DIGIT_Y + 11); 
         M5.Display.print(zipCode[i]);
     }
-
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    M5.Display.setCursor(10, 160);
-    M5.Display.print("ZIP: ");
-    M5.Display.println(zipCode);
-
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-    M5.Display.setCursor(10, 190);
-    M5.Display.println("B = Save & go back");
 
     drawUserIdOverlay();
 }
 
-// ----------- Draw: Record Screen -----------
+// ----------- Draw: Record Screen (Centered) -----------
 void drawRecordScreen() {
     M5.Display.clear();
 
+    // Header section
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(10, 10);
-    M5.Display.println("Record");
+    M5.Display.println("Record Voice");
 
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 38);
-    M5.Display.println("Tap button=toggle  A=send  B=back");
+    M5.Display.println("Button=record/stop  A=send  B=back");
 
-    M5.Display.fillRoundRect(REC_BTN_X, REC_BTN_Y, REC_BTN_W, REC_BTN_H, REC_BTN_R, TFT_RED);
+    // --- Button Geometry ---
+    const int btnW = 140;
+    const int btnH = 140;
+    const int btnR = 70; // High radius for a circular look
+    
+    // Calculate X and Y to center on a 320x240 screen
+    const int btnX = (320 - btnW) / 2;
+    const int btnY = 60 + (180 - btnH) / 2; // Offset slightly for the header
 
-    const char* label = isRecording ? "STOP" : "RECORD";
-    const int charW   = 18;
-    const int charH   = 24;
-    int textW = strlen(label) * charW;
-    int textX = REC_BTN_X + (REC_BTN_W - textW) / 2;
-    int textY = REC_BTN_Y + (REC_BTN_H - charH) / 2;
+    // Draw Button (Pulse color if recording)
+    uint16_t btnColor = isRecording ? TFT_MAROON : TFT_RED;
+    M5.Display.fillRoundRect(btnX, btnY, btnW, btnH, btnR, btnColor);
 
-    M5.Display.setTextSize(3);
-    M5.Display.setTextColor(TFT_WHITE, TFT_RED);
+    // --- Text Centering ---
+    const char* label = isRecording ? "STOP" : "REC"; 
+    
+    M5.Display.setTextSize(3); // Size 3 is roughly 18x24 pixels per char
+    int textWidth = strlen(label) * 18;
+    int textHeight = 24;
+
+    int textX = btnX + (btnW - textWidth) / 2;
+    int textY = btnY + (btnH - textHeight) / 2;
+
+    M5.Display.setTextColor(TFT_WHITE, btnColor);
     M5.Display.setCursor(textX, textY);
     M5.Display.print(label);
-
-    M5.Display.setTextSize(1);
-    if (isRecording) {
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.setCursor(REC_BTN_X + 30, REC_BTN_Y + REC_BTN_H + 10);
-        M5.Display.print("* RECORDING");
-    } else {
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-        M5.Display.setCursor(REC_BTN_X + 10, REC_BTN_Y + REC_BTN_H + 10);
-        M5.Display.print("A = Send record.wav");
-    }
-
-    M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    M5.Display.setCursor(10, 195);
-    M5.Display.printf("ZIP: %s", zipCode);
-
+    
     drawUserIdOverlay();
 }
 

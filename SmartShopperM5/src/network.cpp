@@ -48,20 +48,21 @@ void updateSuggestions(String serverResponse) {
 
 // ----------- Send /record.wav from SD via HTTP POST -----------
 void sendRecording() {
-    // 1. UI: Sending screen
     M5.Display.clear();
-    M5.Display.setTextSize(2);
+    const char* msg = "Sending...";
+    int textSize = 3;
+    int charWidth = 12;  
+    int charHeight = 16; 
+
+    int textWidth = strlen(msg) * charWidth;
+    int x = (M5.Display.width() - textWidth) / 2;
+    int y = (M5.Display.height() - charHeight) / 2;
+
+    M5.Display.setTextSize(textSize);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    M5.Display.setCursor(10, 10);
-    M5.Display.println("Sending...");
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    M5.Display.setCursor(10, 40);
-    M5.Display.printf("File : %s", WAV_PATH);
-    M5.Display.setCursor(10, 55);
-    M5.Display.printf("ZIP  : %s", zipCode);
-    M5.Display.setCursor(10, 70);
-    M5.Display.printf("User : %s", USER_ID.c_str());
+    M5.Display.setCursor(x, y);
+    M5.Display.println(msg);
+
     drawUserIdOverlay();
 
     // 2. Open WAV file from SD
