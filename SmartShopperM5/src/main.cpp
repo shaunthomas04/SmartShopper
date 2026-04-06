@@ -8,6 +8,7 @@
 #include "input.h"
 #include "ui.h"
 #include "network.h"
+#include "ble.h"
 
 void setup() {
     auto cfg = M5.config();
@@ -51,6 +52,8 @@ void setup() {
 
     drawShoppingList();
     currentScreen = SHOPPING_LIST;
+
+    bleSetup();
 }
 
 void loop() {
@@ -140,6 +143,7 @@ void loop() {
             }
             if (!alreadyAdded) {
                 shoppingList.push_back(sel);
+                bleNotifyShoppingList();
                 flashFeedback(TFT_GREEN);
             } else {
                 flashFeedback(TFT_RED);
@@ -159,6 +163,7 @@ void loop() {
 
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
+            bleNotifyShoppingList();
             listScrollOffset = 0;
             drawShoppingList();
         }

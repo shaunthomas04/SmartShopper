@@ -1,4 +1,5 @@
 #include "network.h"
+#include "ble.h"
 #include "config.h"
 #include "globals.h"
 #include "ui.h"
@@ -16,8 +17,7 @@ void updateSuggestions(String serverResponse) {
         return;
     }
 
-    const size_t jsonCapacity = 768 + 250;
-    DynamicJsonDocument objResponse(jsonCapacity);
+    JsonDocument objResponse;
 
     DeserializationError error = deserializeJson(objResponse, serverResponse);
     if (error) {
@@ -123,6 +123,7 @@ void sendRecording() {
         if (httpCode > 0) {
             responseBody = http.getString();
             updateSuggestions(responseBody);
+            bleNotifyShoppingList();
         } else {
             responseBody = "Error: " + String(http.errorToString(httpCode).c_str());
         }
