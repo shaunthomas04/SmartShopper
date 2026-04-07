@@ -3,3 +3,4 @@
 
 void bleSetup();
 void bleNotifyShoppingList();
+void bleStop();

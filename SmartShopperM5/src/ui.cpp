@@ -230,3 +230,17 @@ void flashFeedback(uint16_t color) {
     M5.Display.fillScreen(color);
     delay(80);
 }
+
+
+void drawBleBroadcastScreen() {
+    M5.Display.clear();
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    M5.Display.setCursor(10, 10);
+    M5.Display.println("Broadcasting");
+    M5.Display.println("BLE Server!");
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(10, 80);
+    M5.Display.println("Press B to go back");
+}

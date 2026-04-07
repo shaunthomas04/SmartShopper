@@ -18,7 +18,7 @@ static constexpr size_t RECORD_SIZE        = RECORD_CHUNKS * RECORD_LENGTH;
 
 // -------- Recording state --------
 static int16_t* rec_data   = nullptr;
-static size_t   rec_chunks = 0;   // how many chunks captured so far
+static size_t   rec_chunks = 0;
 static bool     micActive  = false;
 
 // -------- WAV header writer --------
@@ -61,7 +61,7 @@ static void startRecording() {
 
     M5.Speaker.end();
     M5.Mic.begin();
-    micActive  = true;
+    micActive   = true;
     isRecording = true;
     Serial.println("[INFO] Recording started");
     drawRecordScreen();
@@ -71,14 +71,12 @@ static void startRecording() {
 static void stopAndSaveRecording() {
     if (!micActive) return;
 
-    // Wait for any in-progress mic chunk to finish
     while (M5.Mic.isRecording()) { M5.delay(1); }
     M5.Mic.end();
     micActive   = false;
     isRecording = false;
     Serial.printf("[INFO] Recording stopped — %u chunks captured\n", rec_chunks);
 
-    // Show saving status
     M5.Display.clear();
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -96,7 +94,6 @@ static void stopAndSaveRecording() {
         return;
     }
 
-    // Write WAV to SD
     if (SD.exists(WAV_PATH)) SD.remove(WAV_PATH);
     File file = SD.open(WAV_PATH, FILE_WRITE);
     if (!file) {
@@ -116,7 +113,6 @@ static void stopAndSaveRecording() {
         M5.Display.println("Saved!");
     }
 
-    // Free buffer immediately — done with it
     free(rec_data);
     rec_data = nullptr;
 
@@ -128,7 +124,6 @@ static void stopAndSaveRecording() {
 static void tickRecording() {
     if (!micActive || !rec_data) return;
     if (rec_chunks >= RECORD_CHUNKS) {
-        // Buffer full — auto-stop
         Serial.println("[INFO] Buffer full, auto-stopping");
         stopAndSaveRecording();
         return;
@@ -183,17 +178,22 @@ void setup() {
 
     drawShoppingList();
     currentScreen = SHOPPING_LIST;
-
-    // bleSetup();
 }
 
 void loop() {
     M5.update();
 
-    // Capture mic chunk every tick while recording
     tickRecording();
 
     uint32_t buttons = ss.digitalReadBulk(button_mask);
+
+    // -------- Global nav — shut down BLE if leaving BLE_BROADCAST --------
+    if (currentScreen == BLE_BROADCAST) {
+        if (buttonJustPressed(buttons, BUTTON_X) ||
+            buttonJustPressed(buttons, BUTTON_Y)) {
+            bleStop();
+        }
+    }
 
     // -------- Global nav --------
     if (buttonJustPressed(buttons, BUTTON_X) && currentScreen != ZIP_EDITOR) {
@@ -236,7 +236,6 @@ void loop() {
     // ======== RECORD SCREEN ========
     else if (currentScreen == RECORD_SCREEN) {
 
-        // Touch button — START recording
         if (!isRecording && M5.Touch.getCount() > 0) {
             auto t = M5.Touch.getDetail(0);
             if (t.wasPressed()) {
@@ -247,17 +246,14 @@ void loop() {
             }
         }
 
-        // BUTTON_START — STOP recording and save to SD
         if (isRecording && buttonJustPressed(buttons, BUTTON_START)) {
             stopAndSaveRecording();
         }
 
-        // BUTTON_A — send saved WAV to server
         if (!isRecording && buttonJustPressed(buttons, BUTTON_A)) {
             sendRecording();
         }
 
-        // BUTTON_B — back to shopping list (stops mic if somehow still running)
         if (buttonJustPressed(buttons, BUTTON_B)) {
             if (micActive) {
                 while (M5.Mic.isRecording()) { M5.delay(1); }
@@ -308,6 +304,23 @@ void loop() {
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
             selectedIndex = 0;
+            drawShoppingList();
+        }
+
+        if (buttonJustPressed(buttons, BUTTON_B)) {
+            bleSetup();
+            bleNotifyShoppingList();
+            currentScreen = BLE_BROADCAST;
+            drawBleBroadcastScreen();
+        }
+    }
+
+    // ======== BLE BROADCAST ========
+    else if (currentScreen == BLE_BROADCAST) {
+        if (buttonJustPressed(buttons, BUTTON_B)) {
+            bleStop();
+            currentScreen    = SHOPPING_LIST;
+            listScrollOffset = 0;
             drawShoppingList();
         }
     }

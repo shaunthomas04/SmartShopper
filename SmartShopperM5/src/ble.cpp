@@ -109,3 +109,21 @@ void bleNotifyShoppingList() {
         Serial.println("[BLE] Value updated (no client connected)");
     }
 }
+
+void bleStop() {
+    if (!bleServer) return;
+
+    BLEDevice::stopAdvertising();
+
+    if (bleService) {
+        bleService->stop();
+    }
+
+    bleServer       = nullptr;
+    bleService      = nullptr;
+    bleCharacteristic = nullptr;
+    bleClientConnected = false;
+
+    BLEDevice::deinit(true);
+    Serial.println("[BLE] Stopped and deinitialized");
+}

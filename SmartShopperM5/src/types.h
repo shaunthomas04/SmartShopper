@@ -2,7 +2,13 @@
 #include <Arduino.h>
 
 // ----------- Screen States -----------
-enum Screen { SHOPPING_LIST, SUGGESTIONS, ZIP_EDITOR, RECORD_SCREEN };
+enum Screen {
+    SHOPPING_LIST,
+    SUGGESTIONS,
+    ZIP_EDITOR,
+    RECORD_SCREEN,
+    BLE_BROADCAST
+};
 
 // ----------- Suggestion Data -----------
 struct Suggestion {
