@@ -25,7 +25,7 @@ void drawShoppingList() {
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.setCursor(10, 34);
-    M5.Display.println("START=clear  SELECT=switch  X=zip  Y=rec");
+    M5.Display.println("START=clear  SELECT=switch  X=zip  Y=rec  B=Broadcast");
 
     const int itemSpacing = 18;
     const int startY      = 50;
@@ -239,8 +239,6 @@ void drawBleBroadcastScreen() {
     M5.Display.setCursor(10, 10);
     M5.Display.println("Broadcasting");
     M5.Display.println("BLE Server!");
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    M5.Display.setCursor(10, 80);
-    M5.Display.println("Press B to go back");
+
+    drawUserIdOverlay();
 }

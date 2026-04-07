@@ -315,16 +315,6 @@ void loop() {
         }
     }
 
-    // ======== BLE BROADCAST ========
-    else if (currentScreen == BLE_BROADCAST) {
-        if (buttonJustPressed(buttons, BUTTON_B)) {
-            bleStop();
-            currentScreen    = SHOPPING_LIST;
-            listScrollOffset = 0;
-            drawShoppingList();
-        }
-    }
-
     lastButtons = buttons;
     delay(10);
 }
