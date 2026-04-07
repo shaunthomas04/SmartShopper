@@ -10,6 +10,138 @@
 #include "network.h"
 #include "ble.h"
 
+// -------- Recording constants --------
+static constexpr size_t RECORD_SAMPLE_RATE = 16000;
+static constexpr size_t RECORD_LENGTH      = 200;   // samples per chunk
+static constexpr size_t RECORD_CHUNKS      = 256;   // max chunks before auto-stop
+static constexpr size_t RECORD_SIZE        = RECORD_CHUNKS * RECORD_LENGTH;
+
+// -------- Recording state --------
+static int16_t* rec_data   = nullptr;
+static size_t   rec_chunks = 0;   // how many chunks captured so far
+static bool     micActive  = false;
+
+// -------- WAV header writer --------
+static void writeWavHeader(File& file, uint32_t dataSize) {
+    uint32_t sampleRate    = RECORD_SAMPLE_RATE;
+    uint16_t channels      = 1;
+    uint16_t bitsPerSample = 16;
+    uint32_t byteRate      = sampleRate * channels * bitsPerSample / 8;
+    uint16_t blockAlign    = channels * bitsPerSample / 8;
+    uint32_t fmtSize       = 16;
+    uint16_t fmtCode       = 1; // PCM
+    uint32_t fileSize      = dataSize + 36;
+
+    file.write((const uint8_t*)"RIFF", 4);
+    file.write((const uint8_t*)&fileSize,      4);
+    file.write((const uint8_t*)"WAVE",         4);
+    file.write((const uint8_t*)"fmt ",         4);
+    file.write((const uint8_t*)&fmtSize,       4);
+    file.write((const uint8_t*)&fmtCode,       2);
+    file.write((const uint8_t*)&channels,      2);
+    file.write((const uint8_t*)&sampleRate,    4);
+    file.write((const uint8_t*)&byteRate,      4);
+    file.write((const uint8_t*)&blockAlign,    2);
+    file.write((const uint8_t*)&bitsPerSample, 2);
+    file.write((const uint8_t*)"data",         4);
+    file.write((const uint8_t*)&dataSize,      4);
+}
+
+// -------- Start mic + allocate buffer --------
+static void startRecording() {
+    if (micActive) return;
+
+    rec_data = (int16_t*)heap_caps_malloc(RECORD_SIZE * sizeof(int16_t), MALLOC_CAP_8BIT);
+    if (!rec_data) {
+        Serial.println("[ERROR] Failed to allocate recording buffer");
+        return;
+    }
+    memset(rec_data, 0, RECORD_SIZE * sizeof(int16_t));
+    rec_chunks = 0;
+
+    M5.Speaker.end();
+    M5.Mic.begin();
+    micActive  = true;
+    isRecording = true;
+    Serial.println("[INFO] Recording started");
+    drawRecordScreen();
+}
+
+// -------- Stop mic, save to SD, free buffer --------
+static void stopAndSaveRecording() {
+    if (!micActive) return;
+
+    // Wait for any in-progress mic chunk to finish
+    while (M5.Mic.isRecording()) { M5.delay(1); }
+    M5.Mic.end();
+    micActive   = false;
+    isRecording = false;
+    Serial.printf("[INFO] Recording stopped — %u chunks captured\n", rec_chunks);
+
+    // Show saving status
+    M5.Display.clear();
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(10, 10);
+    M5.Display.println("Saving...");
+
+    if (!rec_data || rec_chunks == 0) {
+        Serial.println("[WARN] Nothing recorded, skipping save");
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 40);
+        M5.Display.println("Nothing to save!");
+        if (rec_data) { free(rec_data); rec_data = nullptr; }
+        delay(1500);
+        drawRecordScreen();
+        return;
+    }
+
+    // Write WAV to SD
+    if (SD.exists(WAV_PATH)) SD.remove(WAV_PATH);
+    File file = SD.open(WAV_PATH, FILE_WRITE);
+    if (!file) {
+        Serial.println("[ERROR] Could not open WAV_PATH for writing");
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setCursor(10, 40);
+        M5.Display.println("SD write failed!");
+    } else {
+        uint32_t sampleCount = rec_chunks * RECORD_LENGTH;
+        uint32_t dataBytes   = sampleCount * sizeof(int16_t);
+        writeWavHeader(file, dataBytes);
+        file.write((const uint8_t*)rec_data, dataBytes);
+        file.close();
+        Serial.printf("[INFO] Saved %u bytes to %s\n", dataBytes + 44, WAV_PATH);
+        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+        M5.Display.setCursor(10, 40);
+        M5.Display.println("Saved!");
+    }
+
+    // Free buffer immediately — done with it
+    free(rec_data);
+    rec_data = nullptr;
+
+    delay(1000);
+    drawRecordScreen();
+}
+
+// -------- Capture one chunk into buffer (called each loop tick) --------
+static void tickRecording() {
+    if (!micActive || !rec_data) return;
+    if (rec_chunks >= RECORD_CHUNKS) {
+        // Buffer full — auto-stop
+        Serial.println("[INFO] Buffer full, auto-stopping");
+        stopAndSaveRecording();
+        return;
+    }
+
+    int16_t* chunk = &rec_data[rec_chunks * RECORD_LENGTH];
+    if (M5.Mic.record(chunk, RECORD_LENGTH, RECORD_SAMPLE_RATE)) {
+        rec_chunks++;
+    }
+}
+
+// =====================================================================
+
 void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
@@ -27,8 +159,7 @@ void setup() {
         }
     }
 
-    // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    // Serial.println("[INFO] WiFi connecting...");
+    Serial.println("[INFO] WiFi will connect on demand.");
 
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -58,6 +189,9 @@ void setup() {
 
 void loop() {
     M5.update();
+
+    // Capture mic chunk every tick while recording
+    tickRecording();
 
     uint32_t buttons = ss.digitalReadBulk(button_mask);
 
@@ -101,24 +235,36 @@ void loop() {
 
     // ======== RECORD SCREEN ========
     else if (currentScreen == RECORD_SCREEN) {
-        if (M5.Touch.getCount() > 0) {
+
+        // Touch button — START recording
+        if (!isRecording && M5.Touch.getCount() > 0) {
             auto t = M5.Touch.getDetail(0);
             if (t.wasPressed()) {
                 if (t.x >= REC_BTN_X && t.x <= REC_BTN_X + REC_BTN_W &&
                     t.y >= REC_BTN_Y && t.y <= REC_BTN_Y + REC_BTN_H) {
-                    isRecording = !isRecording;
-                    Serial.println(isRecording ? "[INFO] Button -> STOP" : "[INFO] Button -> RECORD");
-                    drawRecordScreen();
+                    startRecording();
                 }
             }
         }
 
-        if (buttonJustPressed(buttons, BUTTON_A)) {
-            isRecording = false;
+        // BUTTON_START — STOP recording and save to SD
+        if (isRecording && buttonJustPressed(buttons, BUTTON_START)) {
+            stopAndSaveRecording();
+        }
+
+        // BUTTON_A — send saved WAV to server
+        if (!isRecording && buttonJustPressed(buttons, BUTTON_A)) {
             sendRecording();
         }
 
+        // BUTTON_B — back to shopping list (stops mic if somehow still running)
         if (buttonJustPressed(buttons, BUTTON_B)) {
+            if (micActive) {
+                while (M5.Mic.isRecording()) { M5.delay(1); }
+                M5.Mic.end();
+                micActive = false;
+                if (rec_data) { free(rec_data); rec_data = nullptr; }
+            }
             isRecording      = false;
             currentScreen    = SHOPPING_LIST;
             listScrollOffset = 0;
@@ -143,7 +289,6 @@ void loop() {
             }
             if (!alreadyAdded) {
                 shoppingList.push_back(sel);
-                // bleNotifyShoppingList();
                 flashFeedback(TFT_GREEN);
             } else {
                 flashFeedback(TFT_RED);
@@ -154,28 +299,15 @@ void loop() {
 
     // ======== SHOPPING LIST ========
     else if (currentScreen == SHOPPING_LIST) {
-        
-        // Move selection UP
         if (joystickMoved(joystickUp)) {
-            if (selectedIndex > 0) { 
-                selectedIndex--; 
-                drawShoppingList(); 
-            }
+            if (selectedIndex > 0) { selectedIndex--; drawShoppingList(); }
         }
-        
-        // Move selection DOWN
         if (joystickMoved(joystickDown)) {
-            if (selectedIndex < (int)shoppingList.size() - 1) { 
-                selectedIndex++; 
-                drawShoppingList(); 
-            }
+            if (selectedIndex < (int)shoppingList.size() - 1) { selectedIndex++; drawShoppingList(); }
         }
-
-        // Clear List
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
-            // bleNotifyShoppingList();
-            selectedIndex = 0;    
+            selectedIndex = 0;
             drawShoppingList();
         }
     }
