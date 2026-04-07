@@ -87,15 +87,17 @@ void sendRecording() {
     wavFile.read(wavBuf, fileSize);
     wavFile.close();
 
-    // 3. WiFi check / reconnect
-    if (WiFi.status() != WL_CONNECTED) {
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        int tries = 0;
-        while (WiFi.status() != WL_CONNECTED && tries < 20) {
-            delay(500);
-            tries++;
-        }
+    // 3. Connect WiFi now (on demand)
+    Serial.println("[INFO] Connecting to WiFi...");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    int tries = 0;
+    while (WiFi.status() != WL_CONNECTED && tries < 20) {
+        delay(500);
+        tries++;
+        Serial.print(".");
     }
+    Serial.println();
 
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[ERROR] WiFi Failed");
@@ -124,7 +126,6 @@ void sendRecording() {
         if (httpCode > 0) {
             responseBody = http.getString();
             updateSuggestions(responseBody);
-            bleNotifyShoppingList();
         } else {
             responseBody = "Error: " + String(http.errorToString(httpCode).c_str());
         }
@@ -134,7 +135,14 @@ void sendRecording() {
         Serial.printf("Response  : %s\n", responseBody.c_str());
         Serial.println("===================================");
 
-        // 5. UI: Result
+        http.end();
+
+        // 5. Disconnect WiFi immediately after request
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        Serial.println("[INFO] WiFi disconnected.");
+
+        // 6. UI: Result
         M5.Display.clear();
         M5.Display.setTextSize(2);
         if (httpCode == HTTP_CODE_OK || httpCode == 201) {
@@ -154,12 +162,13 @@ void sendRecording() {
         M5.Display.setCursor(10, 70);
         M5.Display.println(responseBody.substring(0, 200));
 
-        http.end();
     } else {
         Serial.println("[ERROR] HTTP.begin failed - Check URL format");
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
     }
 
-    // 6. Cleanup
+    // 7. Cleanup
     free(wavBuf);
     drawUserIdOverlay();
     delay(3000);

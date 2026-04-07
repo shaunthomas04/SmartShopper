@@ -27,8 +27,8 @@ void setup() {
         }
     }
 
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.println("[INFO] WiFi connecting...");
+    // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    // Serial.println("[INFO] WiFi connecting...");
 
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -53,7 +53,7 @@ void setup() {
     drawShoppingList();
     currentScreen = SHOPPING_LIST;
 
-    bleSetup();
+    // bleSetup();
 }
 
 void loop() {
@@ -143,7 +143,7 @@ void loop() {
             }
             if (!alreadyAdded) {
                 shoppingList.push_back(sel);
-                bleNotifyShoppingList();
+                // bleNotifyShoppingList();
                 flashFeedback(TFT_GREEN);
             } else {
                 flashFeedback(TFT_RED);
@@ -174,7 +174,7 @@ void loop() {
         // Clear List
         if (buttonJustPressed(buttons, BUTTON_START)) {
             shoppingList.clear();
-            bleNotifyShoppingList();
+            // bleNotifyShoppingList();
             selectedIndex = 0;    
             drawShoppingList();
         }
