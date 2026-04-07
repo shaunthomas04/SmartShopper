@@ -1,98 +1,162 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  Image,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  Linking,
+  TextInput,
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const DATA = {
+  shoppingResults: [
+    {
+      name: "Fortnum & Mason Celebration Blend Loose Leaf Tea Tin",
+      link: "https://www.google.com",
+      image: "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcT8i1c_lbxc6VI_QIJzgz7xXbIWOcTJPUaDM5AK63JjAYXfBXcimHC5vF8enDL2GyT2Hdw_MGx6zBE",
+      price: "$39.95",
+      cost: 39.95,
+      rating: null,
+      reviews: null,
+      store: "Williams-Sonoma",
+      distance: "Nearby, 14 mi"
+    },
+    {
+      name: "Teabloom Exceptional Loose Leaf Tea Chest",
+      link: "https://www.google.com",
+      image: "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcThqlKK1ISaqiZlDE__kD4CDJ68zuNu3PEf8Gy7gp4ch9SRafnDhSyvOIN_7A",
+      price: "$69.95",
+      cost: 69.95,
+      rating: 5,
+      reviews: 70,
+      store: "Teabloom",
+      distance: null
+    },
+    {
+      name: "Lovery Home Spa Gift Basket Honey & Almond Luxury Set",
+      link: "https://www.google.com",
+      image: "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRrZ5XF8kIGPL63naHzNegB3GfdnLANdQaW69EkC6iht5p1o7A530X1HSXGpMJ0EIwEHQUpLjEbcMenOELpAk0Yzqzs9fP7Hw",
+      price: "$39.99",
+      cost: 39.99,
+      rating: 3.8,
+      reviews: 112,
+      store: "Target",
+      distance: null
+    }
+  ]
+};
 
-export default function HomeScreen() {
+export default function IndexScreen() {
+  const [bleName, setBleName] = useState('');
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => Linking.openURL(item.link)}
+    >
+      <Image source={{ uri: item.image }} style={styles.image} />
+
+      <View style={styles.info}>
+        <Text style={styles.name}>{item.name}</Text>
+
+        <Text style={styles.price}>{item.price}</Text>
+
+        {item.store && (
+          <Text style={styles.meta}>Store: {item.store}</Text>
+        )}
+
+        {item.rating && (
+          <Text style={styles.meta}>
+            ⭐ {item.rating} ({item.reviews || 0} reviews)
+          </Text>
+        )}
+
+        {item.distance && (
+          <Text style={styles.meta}>{item.distance}</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <SafeAreaView style={styles.container}>
+      
+      {/* BLE Device Input */}
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>BLE Device Name</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter device name..."
+          placeholderTextColor="#888"
+          value={bleName}
+          onChangeText={setBleName}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <FlatList
+        data={DATA.shoppingResults}
+        keyExtractor={(item, index) => index.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#111',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+
+  inputContainer: {
+    padding: 12,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  inputLabel: {
+    color: '#aaa',
+    marginBottom: 6,
+    fontSize: 12,
+  },
+  input: {
+    backgroundColor: '#1c1c1e',
+    color: 'white',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+
+  card: {
+    backgroundColor: '#1c1c1e',
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: 200,
+  },
+  info: {
+    padding: 12,
+  },
+  name: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  price: {
+    color: '#4cd964',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  meta: {
+    color: '#aaa',
+    fontSize: 13,
   },
 });
