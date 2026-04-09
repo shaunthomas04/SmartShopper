@@ -4,16 +4,17 @@ import {
   View,
   Text,
   Image,
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   Linking,
   TextInput,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import BLEManager from '../ble/BLEManager';
 
+// Define the shape of a single shopping item
 type ShoppingItem = {
   name: string;
   link: string;
@@ -24,6 +25,7 @@ type ShoppingItem = {
   reviews: number | null;
   store: string | null;
   distance: string | null;
+  index?: number; // Added to track position from M5
 };
 
 type BLEStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'error';
@@ -32,7 +34,9 @@ export default function IndexScreen() {
   const [bleName, setBleName] = useState('');
   const [status, setStatus] = useState<BLEStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
-  const [items, setItems] = useState<ShoppingItem[]>([]);
+  
+  // Changed from items[] to a single currentItem
+  const [currentItem, setCurrentItem] = useState<ShoppingItem | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -70,13 +74,15 @@ export default function IndexScreen() {
           BLEManager.subscribeToNotifications((message) => {
             try {
               const parsed = JSON.parse(message);
-              // Handle both array and { shoppingResults: [...] } formats
-              const results: ShoppingItem[] = Array.isArray(parsed)
-                ? parsed
-                : parsed.shoppingResults ?? [];
-              setItems(results);
-            } catch {
-              console.log('Non-JSON message received:', message);
+              
+              // Handle single object or array fallback
+              if (parsed && !Array.isArray(parsed)) {
+                setCurrentItem(parsed);
+              } else if (Array.isArray(parsed) && parsed.length > 0) {
+                setCurrentItem(parsed[0]);
+              }
+            } catch (err) {
+              console.log('Non-JSON or malformed message received:', message);
             }
           });
         } catch (err) {
@@ -97,44 +103,24 @@ export default function IndexScreen() {
     await BLEManager.disconnect();
     setStatus('idle');
     setStatusMessage('');
-    setItems([]);
+    setCurrentItem(null);
   };
-
-  const renderItem = ({ item }: { item: ShoppingItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => Linking.openURL(item.link)}
-    >
-      <Image source={{ uri: item.image }} style={styles.image} />
-      <View style={styles.info}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.price}>{item.price}</Text>
-        {item.store && <Text style={styles.meta}>Store: {item.store}</Text>}
-        {item.rating != null && (
-          <Text style={styles.meta}>
-            ⭐ {item.rating} ({item.reviews ?? 0} reviews)
-          </Text>
-        )}
-        {item.distance && <Text style={styles.meta}>{item.distance}</Text>}
-      </View>
-    </TouchableOpacity>
-  );
 
   const isConnected = status === 'connected';
 
   return (
     <SafeAreaView style={styles.container}>
-
-      {/* BLE Input + Button */}
+      {/* BLE Input + Connection Controls */}
       <View style={styles.inputContainer}>
         <Text style={styles.inputLabel}>BLE Device Name</Text>
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { flex: 1 }]}
-            placeholder="Enter device name..."
+            placeholder="Enter device name (e.g. shaun2026)"
             placeholderTextColor="#888"
             value={bleName}
             onChangeText={setBleName}
+            autoCapitalize="none"
             editable={!isConnected && status !== 'scanning'}
           />
           <TouchableOpacity
@@ -148,7 +134,7 @@ export default function IndexScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Status row */}
+        {/* Status Indicator */}
         {(status !== 'idle') && (
           <View style={styles.statusRow}>
             {(status === 'scanning' || status === 'connecting') && (
@@ -165,60 +151,186 @@ export default function IndexScreen() {
         )}
       </View>
 
-      {/* Results */}
-      {items.length === 0 && isConnected && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Waiting for data from device...</Text>
-          <ActivityIndicator color="#4cd964" style={{ marginTop: 10 }} />
-        </View>
-      )}
+      <ScrollView contentContainerStyle={styles.mainContent}>
+        {currentItem ? (
+          <View style={styles.selectionContainer}>
+            <Text style={styles.liveLabel}>● LIVE SELECTION</Text>
+            
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.9}
+              onPress={() => currentItem.link && Linking.openURL(currentItem.link)}
+            >
+              <Image 
+                source={{ uri: currentItem.image || 'https://via.placeholder.com/400x300?text=No+Image' }} 
+                style={styles.image} 
+                resizeMode="cover"
+              />
+              <View style={styles.info}>
+                <Text style={styles.name}>{currentItem.name}</Text>
+                <Text style={styles.price}>{currentItem.price}</Text>
+                
+                <View style={styles.detailsRow}>
+                  {currentItem.store && <Text style={styles.meta}>📍 {currentItem.store}</Text>}
+                  {currentItem.distance && <Text style={styles.meta}> • {currentItem.distance}</Text>}
+                </View>
 
-      <FlatList
-        data={items}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      />
+                {currentItem.rating != null && (
+                  <Text style={styles.meta}>
+                    ⭐ {currentItem.rating} ({currentItem.reviews ?? 0} reviews)
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
 
+            <Text style={styles.helperText}>Scroll on your M5Stack to update this view</Text>
+          </View>
+        ) : isConnected ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Connected! Waiting for item data...</Text>
+            <ActivityIndicator color="#4cd964" style={{ marginTop: 12 }} />
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Connect to your M5Stack to view items</Text>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: '#111' },
-  inputContainer: { padding: 12 },
-  inputLabel:     { color: '#aaa', marginBottom: 6, fontSize: 12 },
-  inputRow:       { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#000' 
+  },
+  inputContainer: { 
+    padding: 16, 
+    backgroundColor: '#111',
+    borderBottomWidth: 1,
+    borderColor: '#222'
+  },
+  inputLabel: { 
+    color: '#888', 
+    marginBottom: 8, 
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  inputRow: { 
+    flexDirection: 'row', 
+    gap: 10, 
+    alignItems: 'center' 
+  },
   input: {
     backgroundColor: '#1c1c1e',
     color: 'white',
-    padding: 10,
-    borderRadius: 8,
+    padding: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#333',
   },
   button: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    justifyContent: 'center',
   },
-  buttonConnect:    { backgroundColor: '#4cd964' },
-  buttonDisconnect: { backgroundColor: '#ff3b30' },
-  buttonText:       { color: '#000', fontWeight: '700', fontSize: 14 },
-  statusRow:        { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  statusText:       { color: '#aaa', fontSize: 12 },
-  emptyState:       { alignItems: 'center', marginTop: 40 },
-  emptyText:        { color: '#555', fontSize: 14 },
+  buttonConnect: { 
+    backgroundColor: '#4cd964' 
+  },
+  buttonDisconnect: { 
+    backgroundColor: '#ff3b30' 
+  },
+  buttonText: { 
+    color: '#000', 
+    fontWeight: 'bold', 
+    fontSize: 14 
+  },
+  statusRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginTop: 10 
+  },
+  statusText: { 
+    color: '#aaa', 
+    fontSize: 13 
+  },
+  mainContent: {
+    flexGrow: 1,
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  selectionContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  liveLabel: {
+    color: '#4cd964',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 15,
+    letterSpacing: 2,
+  },
   card: {
     backgroundColor: '#1c1c1e',
-    marginHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 12,
+    width: '90%',
+    borderRadius: 24,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#333',
+    // Shadow for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    // Elevation for Android
+    elevation: 10,
   },
-  image:  { width: '100%', height: 200 },
-  info:   { padding: 12 },
-  name:   { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 6 },
-  price:  { color: '#4cd964', fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
-  meta:   { color: '#aaa', fontSize: 13 },
+  image: { 
+    width: '100%', 
+    height: 250 
+  },
+  info: { 
+    padding: 20 
+  },
+  name: { 
+    color: 'white', 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  price: { 
+    color: '#4cd964', 
+    fontSize: 22, 
+    fontWeight: '800', 
+    marginBottom: 12 
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  meta: { 
+    color: '#aaa', 
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  helperText: { 
+    color: '#444', 
+    fontSize: 13, 
+    marginTop: 20,
+    fontStyle: 'italic'
+  },
+  emptyState: { 
+    alignItems: 'center', 
+    marginTop: 60,
+    paddingHorizontal: 40 
+  },
+  emptyText: { 
+    color: '#555', 
+    fontSize: 16, 
+    textAlign: 'center',
+    lineHeight: 24
+  },
 });

@@ -105,6 +105,7 @@ void bleNotifyShoppingList() {
         payload = payload.substring(0, 512);
     }
 
+    Serial.printf("[JSON OUT] %s\n", payload.c_str());
     bleCharacteristic->setValue(payload.c_str());
 
     if (bleClientConnected) {

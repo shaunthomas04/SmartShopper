@@ -75,38 +75,41 @@ class BLEManager {
   // simply discarded on the next successful parse or on disconnect.
   // ---------------------------------------------------------------------------
   subscribeToNotifications(onMessage: (message: string) => void) {
-    if (!this.device) { console.log("No device to subscribe to"); return }
+    if (!this.device) return;
 
-    // Always clean up any previous subscription + buffer before starting fresh
-    this.subscription?.remove()
-    this.buffer = ""
+    this.subscription?.remove();
+    this.buffer = ""; // Reset buffer on new subscription
 
     this.subscription = this.device.monitorCharacteristicForService(
       SERVICE_UUID,
       CHARACTERISTIC_UUID,
       (error, characteristic) => {
         if (error) {
-          console.log("Notify error:", error)
-          return
+          console.log("Notify error:", error);
+          return;
         }
-        if (!characteristic?.value) return
+        if (!characteristic?.value) return;
 
-        const chunk = Buffer.from(characteristic.value, "base64").toString("utf-8")
-        this.buffer += chunk
+        const chunk = Buffer.from(characteristic.value, "base64").toString("utf-8");
+        
+        // If the chunk starts with '{', it's a new single-item push. 
+        // We reset the buffer to avoid getting stuck with old data.
+        if (chunk.startsWith("{")) {
+          this.buffer = chunk;
+        } else {
+          this.buffer += chunk;
+        }
 
-        console.log(`Received chunk (${chunk.length} bytes), buffer total: ${this.buffer.length} bytes`)
-
-        // Try to parse — succeeds only when we have the full JSON
         try {
-          const parsed = JSON.parse(this.buffer)
-          console.log("Complete payload received, resetting buffer")
-          this.buffer = "" // ready for the next push
-          onMessage(JSON.stringify(parsed))
+          const parsed = JSON.parse(this.buffer);
+          // Success! Clear buffer and pass the raw JSON string back
+          this.buffer = ""; 
+          onMessage(JSON.stringify(parsed));
         } catch {
-          // Incomplete — keep accumulating chunks
+          // Incomplete JSON (waiting for more chunks)
         }
       }
-    )
+    );
   }
 
   unsubscribe() {
