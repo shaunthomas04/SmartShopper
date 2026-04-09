@@ -162,7 +162,7 @@ export default function IndexScreen() {
               onPress={() => currentItem.link && Linking.openURL(currentItem.link)}
             >
               <Image 
-                source={{ uri: currentItem.image || 'https://via.placeholder.com/400x300?text=No+Image' }} 
+                source={{ uri: currentItem.image || 'https://m.media-amazon.com/images/I/51ergTbpNlL.jpg' }} 
                 style={styles.image} 
                 resizeMode="cover"
               />
@@ -273,24 +273,21 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   card: {
-    backgroundColor: '#1c1c1e',
-    width: '90%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#333',
-    // Shadow for iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    // Elevation for Android
-    elevation: 10,
-  },
-  image: { 
-    width: '100%', 
-    height: 250 
-  },
+  backgroundColor: '#1c1c1e',
+  width: '90%',
+  borderRadius: 24,
+  // Remove overflow: 'hidden' temporarily to see if the image is just being clipped
+  borderWidth: 1,
+  borderColor: '#333',
+  minHeight: 350, // Force a minimum height for the whole card
+},
+image: { 
+  width: '100%', 
+  height: 250,
+  backgroundColor: '#333', // This will show a grey box if the image fails to load
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
+},
   info: { 
     padding: 20 
   },
