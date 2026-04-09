@@ -234,11 +234,53 @@ void flashFeedback(uint16_t color) {
 
 void drawBleBroadcastScreen() {
     M5.Display.clear();
+ 
+    // Header
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
     M5.Display.setCursor(10, 10);
-    M5.Display.println("Broadcasting");
-    M5.Display.println("BLE Server!");
-
+    M5.Display.println("BLE Broadcasting");
+ 
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.setCursor(10, 34);
+    M5.Display.println("X/Y=stop broadcast");
+ 
+    const int itemSpacing = 18;
+    const int startY      = 50;
+    const int maxVisible  = 10;
+ 
+    if (shoppingList.empty()) {
+        M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        M5.Display.setCursor(10, startY);
+        M5.Display.println("(Empty)");
+    } else {
+        static int bleTopIndex = 0;
+ 
+        if (selectedIndex >= bleTopIndex + maxVisible)
+            bleTopIndex = selectedIndex - maxVisible + 1;
+        if (selectedIndex < bleTopIndex)
+            bleTopIndex = selectedIndex;
+ 
+        int endIndex = min((int)shoppingList.size(), bleTopIndex + maxVisible);
+ 
+        for (int i = bleTopIndex; i < endIndex; i++) {
+            int y = startY + (i - bleTopIndex) * itemSpacing;
+ 
+            if (i == selectedIndex) {
+                M5.Display.fillRect(0, y - 2, 320, itemSpacing, TFT_DARKGREEN);
+                M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREEN);
+            } else {
+                M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            }
+ 
+            M5.Display.setTextSize(1);
+            M5.Display.setCursor(10, y);
+            M5.Display.printf("%s - %s",
+                shoppingList[i].price.c_str(),
+                shoppingList[i].name.c_str());
+        }
+    }
+ 
     drawUserIdOverlay();
 }

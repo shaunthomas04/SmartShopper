@@ -315,6 +315,33 @@ void loop() {
         }
     }
 
+
+    // ======== BLE BROADCAST ========
+    // (add this block inside the else-if chain, after SHOPPING_LIST)
+    else if (currentScreen == BLE_BROADCAST) {
+        if (!shoppingList.empty()) {
+            if (joystickMoved(joystickUp)) {
+                if (selectedIndex > 0) {
+                    selectedIndex--;
+                    Serial.printf("[BLE] Selected: %s - %s\n",
+                        shoppingList[selectedIndex].price.c_str(),
+                        shoppingList[selectedIndex].name.c_str());
+                    drawBleBroadcastScreen();
+                }
+            }
+            if (joystickMoved(joystickDown)) {
+                if (selectedIndex < (int)shoppingList.size() - 1) {
+                    selectedIndex++;
+                    Serial.printf("[BLE] Selected: %s - %s\n",
+                        shoppingList[selectedIndex].price.c_str(),
+                        shoppingList[selectedIndex].name.c_str());
+                    drawBleBroadcastScreen();
+                }
+            }
+        }
+    }
+
+    
     lastButtons = buttons;
     delay(10);
 }
