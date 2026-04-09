@@ -4,3 +4,4 @@
 void bleSetup();
 void bleNotifyShoppingList();
 void bleStop();
+void bleNotifySingleItem(int index);

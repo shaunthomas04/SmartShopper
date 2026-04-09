@@ -25,7 +25,9 @@ class ShopperServerCallbacks : public BLEServerCallbacks {
         bleClientConnected = true;
         Serial.println("[BLE] Client connected");
         // Push current list immediately on connect
-        bleNotifyShoppingList();
+        if (!shoppingList.empty()) {
+            bleNotifySingleItem(selectedIndex); 
+        }
     }
     void onDisconnect(BLEServer *pServer) override {
         bleClientConnected = false;
@@ -37,30 +39,33 @@ class ShopperServerCallbacks : public BLEServerCallbacks {
 // ----------- Setup -----------
 void bleSetup() {
     BLEDevice::init(USER_ID.c_str());
-
     bleServer = BLEDevice::createServer();
     bleServer->setCallbacks(new ShopperServerCallbacks());
-
     bleService = bleServer->createService(SHOPPER_SERVICE_UUID);
 
     bleCharacteristic = bleService->createCharacteristic(
         SHOPPER_CHARACTERISTIC_UUID,
-        BLECharacteristic::PROPERTY_READ   |
-        BLECharacteristic::PROPERTY_NOTIFY
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
     );
 
     bleCharacteristic->addDescriptor(new BLE2902());
-    bleCharacteristic->setValue("[]");  // empty list on start
+    
+    // Set initial value to empty object instead of array
+    bleCharacteristic->setValue("{}"); 
 
     bleService->start();
 
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     adv->addServiceUUID(SHOPPER_SERVICE_UUID);
     adv->setScanResponse(true);
-    adv->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
     Serial.printf("[BLE] Advertising started as %s\n", USER_ID.c_str());
+
+    // NEW: Notify the first item immediately if available
+    if (!shoppingList.empty()) {
+        bleNotifySingleItem(selectedIndex); 
+    }
 }
 
 // ----------- Serialize shoppingList → JSON and notify -----------
@@ -126,4 +131,38 @@ void bleStop() {
 
     BLEDevice::deinit(true);
     Serial.println("[BLE] Stopped and deinitialized");
+}
+
+void bleNotifySingleItem(int index) {
+    if (!bleCharacteristic || shoppingList.empty()) return;
+    
+    // Safety check for index
+    if (index < 0 || index >= (int)shoppingList.size()) return;
+
+    const auto& s = shoppingList[index];
+
+    // Create JSON for a SINGLE object instead of an array
+    JsonDocument doc;
+    doc["name"]     = s.name;
+    doc["price"]    = s.price;
+    doc["cost"]     = s.cost;
+    doc["rating"]   = s.rating;
+    doc["reviews"]  = s.reviews;
+    doc["store"]    = s.store;
+    doc["distance"] = s.distance;
+    doc["link"]     = s.link;
+    doc["image"]    = s.image;
+    doc["index"]    = index; // Useful for the client to know which item this is
+
+    String payload;
+    serializeJson(doc, payload);
+
+    bleCharacteristic->setValue(payload.c_str());
+
+    if (bleClientConnected) {
+        bleCharacteristic->notify();
+        Serial.printf("[BLE] Notified single item (%d): %s\n", index, s.name.c_str());
+    } else {
+        Serial.printf("[BLE] Updated value for item: %s\n", s.name.c_str());
+    }
 }
