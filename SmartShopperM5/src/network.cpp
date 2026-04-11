@@ -31,15 +31,15 @@ void updateSuggestions(String serverResponse) {
 
     for (JsonObject item : shoppingResults) {
         Suggestion s;
-        s.name     = item["name"]     | "";
-        s.link     = item["link"]     | "";
-        s.image    = item["image"]    | "";
-        s.price    = item["price"]    | "";
-        s.cost     = item["cost"]     | 0.0f;
-        s.rating   = item["rating"]   | 0.0f;
-        s.reviews  = item["reviews"]  | 0;
-        s.store    = item["store"]    | "";
-        s.distance = item["distance"] | "";
+        s.name     = item["name"].as<String>();
+        s.link     = item["link"].as<String>();
+        s.image    = item["image"].as<String>();
+        s.price    = item["price"].as<String>();
+        s.cost     = item["cost"].isNull()     ? 0.0f : item["cost"].as<float>();
+        s.rating   = item["rating"].isNull()   ? 0.0f : item["rating"].as<float>();
+        s.reviews  = item["reviews"].isNull()  ? 0    : item["reviews"].as<int>();
+        s.store    = item["store"].as<String>();
+        s.distance = item["distance"].isNull() ? ""   : item["distance"].as<String>();
         responseSuggestions.push_back(s);
     }
 

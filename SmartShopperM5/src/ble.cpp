@@ -136,13 +136,10 @@ void bleStop() {
 
 void bleNotifySingleItem(int index) {
     if (!bleCharacteristic || shoppingList.empty()) return;
-    
-    // Safety check for index
     if (index < 0 || index >= (int)shoppingList.size()) return;
 
     const auto& s = shoppingList[index];
 
-    // Create JSON for a SINGLE object instead of an array
     JsonDocument doc;
     doc["name"]     = s.name;
     doc["price"]    = s.price;
@@ -153,17 +150,26 @@ void bleNotifySingleItem(int index) {
     doc["distance"] = s.distance;
     doc["link"]     = s.link;
     doc["image"]    = s.image;
-    doc["index"]    = index; // Useful for the client to know which item this is
+    doc["index"]    = index;
 
     String payload;
     serializeJson(doc, payload);
 
-    bleCharacteristic->setValue(payload.c_str());
+    Serial.printf("[BLE] Total payload size: %d bytes\n", payload.length());
 
-    if (bleClientConnected) {
-        bleCharacteristic->notify();
-        Serial.printf("[BLE] Notified single item (%d): %s\n", index, s.name.c_str());
-    } else {
-        Serial.printf("[BLE] Updated value for item: %s\n", s.name.c_str());
+    // Send in 200-byte chunks
+    const int CHUNK_SIZE = 200;
+    int totalLength = payload.length();
+    int offset = 0;
+
+    while (offset < totalLength) {
+        String chunk = payload.substring(offset, offset + CHUNK_SIZE);
+        bleCharacteristic->setValue(chunk.c_str());
+        if (bleClientConnected) {
+            bleCharacteristic->notify();
+            Serial.printf("[BLE] Sent chunk at offset %d: %s\n", offset, chunk.c_str());
+        }
+        offset += CHUNK_SIZE;
+        delay(50); // Give BLE stack time to send before next chunk
     }
 }
