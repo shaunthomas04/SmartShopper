@@ -78,39 +78,43 @@ class BLEManager {
     if (!this.device) return;
 
     this.subscription?.remove();
-    this.buffer = ""; // Reset buffer on new subscription
+    this.buffer = "";
 
     this.subscription = this.device.monitorCharacteristicForService(
       SERVICE_UUID,
       CHARACTERISTIC_UUID,
       (error, characteristic) => {
-        if (error) {
-          console.log("Notify error:", error);
-          return;
-        }
+        if (error) { console.log("Notify error:", error); return; }
         if (!characteristic?.value) return;
 
         const chunk = Buffer.from(characteristic.value, "base64").toString("utf-8");
-        
-        // If the chunk starts with '{', it's a new single-item push. 
-        // We reset the buffer to avoid getting stuck with old data.
-        if (chunk.startsWith("{")) {
+        console.log("[BLE] Chunk received:", chunk);
+
+        // Only reset buffer if this chunk starts a new JSON object
+        // AND the current buffer is either empty or already complete
+        if (chunk.startsWith("{") && (this.buffer === "" || this.isCompleteJson(this.buffer))) {
           this.buffer = chunk;
         } else {
           this.buffer += chunk;
         }
 
+        console.log("[BLE] Buffer so far:", this.buffer);
+
         try {
           const parsed = JSON.parse(this.buffer);
-          // Success! Clear buffer and pass the raw JSON string back
-          this.buffer = ""; 
+          this.buffer = "";
           onMessage(JSON.stringify(parsed));
         } catch {
-          // Incomplete JSON (waiting for more chunks)
+          // Still accumulating chunks
         }
       }
     );
-  }
+}
+
+// Helper to check if buffer is already valid JSON
+private isCompleteJson(str: string): boolean {
+    try { JSON.parse(str); return true; } catch { return false; }
+}
 
   unsubscribe() {
     this.subscription?.remove()
