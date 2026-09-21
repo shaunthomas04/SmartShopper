@@ -2,9 +2,13 @@
 
 SmartShopper is a voice-assisted shopping system that turns a spoken request into location-aware product suggestions. It combines an M5Stack Core2 device, a cloud processing service, and a React Native mobile client.
 
+## Demo
+
+![SmartShopper demo](images/demo.png)
+
 ## High-level architecture
 
-![SmartShopper architecture diagram](images/architecture-diagram.png)
+![SmartShopper architecture diagram](images/architecture.png)
 
 The system is composed of three main layers:
 
@@ -89,7 +93,3 @@ User speaks a shopping request
 | [`SmartShopperGCRF`](SmartShopperGCRF) | JavaScript Google Cloud Function for transcription, query generation, location lookup, and product search. |
 | [`SmartShopperReactNative`](SmartShopperReactNative) | TypeScript/React Native mobile application for receiving and displaying BLE product data. |
 | [`images`](images) | Architecture and demonstration images for the project documentation. |
-
-## Demo
-
-![SmartShopper demo](images/demo.png)
